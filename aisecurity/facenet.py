@@ -26,7 +26,7 @@ class FaceNet(object):
 
     # HYPERPARAMETERS
     HYPERPARAMS = {
-        "alpha": 0.65,
+        "alpha": 0.7,
         "mtcnn_alpha": 0.99
     }
 
@@ -151,8 +151,6 @@ class FaceNet(object):
     def _recognize(self, img, faces=None, db_types=None):
         assert self.__static_db or self.__dynamic_db, "data must be provided"
 
-        start = time.time()
-
         knns, data = [], {}
         if db_types is None or "static" in db_types:
             knns.append(self.static_knn)
@@ -169,9 +167,7 @@ class FaceNet(object):
         best_match, l2_dist = sorted(best_matches, key=lambda n: n[1])[0]
         is_recognized = l2_dist <= FaceNet.HYPERPARAMS["alpha"]
 
-        elapsed = time.time() - start
-        
-        return embedding, is_recognized, best_match, l2_dist, elapsed
+        return embedding, is_recognized, best_match, l2_dist
 
     # FACIAL RECOGNITION
     def recognize(self, img, verbose=True):
@@ -189,7 +185,7 @@ class FaceNet(object):
 
 
     # REAL-TIME FACIAL RECOGNITION HELPER
-    async def _real_time_recognize(self, width, height, use_log, use_dynamic, using_picamera):
+    async def _real_time_recognize(self, width, height, use_log, use_dynamic, use_picam, use_graphics):
         db_types = ["static"]
         if use_dynamic:
             db_types.append("dynamic")
@@ -198,12 +194,14 @@ class FaceNet(object):
 
         mtcnn = MTCNN(min_face_size=0.5 * (width + height) / 3)  # face needs to fill at least 1/3 of the frame
 
-        cap = self.get_video_cap(is_picamera=using_picamera)
+        cap = self.get_video_cap(picamera=use_picam)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
         missed_frames = 0
         l2_dists = []
+
+        start = time.time()
 
         while True:
             _, frame = cap.read()
@@ -218,8 +216,10 @@ class FaceNet(object):
 
                     # facial recognition
                     try:
-                        embedding, is_recognized, best_match, l2_dist, elapsed = self._recognize(frame, face, db_types)
+                        embedding, is_recognized, best_match, l2_dist = self._recognize(frame, face, db_types)
                         print("L2 distance: {} ({}){}".format(l2_dist, best_match, " !" if not is_recognized else ""))
+                        if person["confidence"] < self.HYPERPARAMS["mtcnn_alpha"]:
+                            continue
                     except (ValueError, cv2.error) as error:  # error-handling using names is unstable-- change later
                         if "query data dimension" in str(error):
                             raise ValueError("Current model incompatible with database")
@@ -229,17 +229,19 @@ class FaceNet(object):
                             print("Unknown error: " + str(error))
                         continue
 
-                    if person["confidence"] >= self.HYPERPARAMS["mtcnn_alpha"]:
-                        # add graphics
+                    # add graphics
+                    if use_graphics:
                         self.add_graphics(frame, overlay, person, width, height, is_recognized, best_match)
+
+                    if time.time() - start > 5.:  # wait 5 seconds before logging starts
 
                         # update dynamic database
                         if use_dynamic:
-                            self.dynamic_update(embedding, l2_dists, elapsed)
+                            self.dynamic_update(embedding, l2_dists)
 
                         # log activity
                         if use_log:
-                            self.log_activity(is_recognized, best_match, frame, elapsed, log_unknown=True)
+                            self.log_activity(is_recognized, best_match, frame, log_unknown=True)
 
                         l2_dists.append(l2_dist)
 
@@ -262,20 +264,21 @@ class FaceNet(object):
         cv2.destroyAllWindows()
 
     # REAL-TIME FACIAL RECOGNITION
-    def real_time_recognize(self, width=500, height=250, use_log=True, use_dynamic=False, using_picamera=False):
+    def real_time_recognize(self, width=500, height=250, use_log=True, use_dynamic=False, use_picam=False,
+                            use_graphics=True):
 
         async def async_helper(recognize_func, *args, **kwargs):
             await recognize_func(*args, **kwargs)
 
         loop = asyncio.new_event_loop()
         task = loop.create_task(async_helper(self._real_time_recognize, width, height, use_log,
-                                             use_dynamic=use_dynamic, using_picamera=using_picamera))
+                                             use_dynamic=use_dynamic, use_picam=use_picam, use_graphics=use_graphics))
         loop.run_until_complete(task)
 
 
     # GRAPHICS
     @staticmethod
-    def get_video_cap(is_picamera):
+    def get_video_cap(picamera):
         def _gstreamer_pipeline(capture_width=1280, capture_height=720, display_width=1280, display_height=720,
                                 framerate=60, flip_method=0):
             return (
@@ -285,7 +288,7 @@ class FaceNet(object):
                 % (capture_width, capture_height, framerate, flip_method, display_width,display_height)
             )
 
-        if is_picamera:
+        if picamera:
             return cv2.VideoCapture(_gstreamer_pipeline(), cv2.CAP_GSTREAMER)
         else:
             return cv2.VideoCapture(0)
@@ -339,6 +342,7 @@ class FaceNet(object):
 
     # DISPLAY
     def show_embeds(self, encrypted=False, single=False):
+        assert self.data, "data must be provided to show embeddings"
 
         def closest_multiples(n):
             if n == 0 or n == 1:
@@ -369,9 +373,7 @@ class FaceNet(object):
 
     # LOGGING
     @staticmethod
-    def log_activity(is_recognized, best_match, frame, elapsed, log_unknown=True):
-        if elapsed > 1.:
-            return None
+    def log_activity(is_recognized, best_match, frame, log_unknown=True):
 
         cooldown_ok = lambda t: time.time() - t > log.THRESHOLDS["cooldown"]
 
@@ -399,10 +401,7 @@ class FaceNet(object):
             cprint("Unknown activity logged", color="red", attrs=["bold"])
 
     # DYNAMIC DATABASE
-    def dynamic_update(self, embedding, l2_dists, elapsed):
-        if elapsed > 1.0:
-            return None
-
+    def dynamic_update(self, embedding, l2_dists):
         previous_frames = l2_dists[-log.THRESHOLDS["num_unknown"]:]
         filtered = list(filter(lambda x: x > self.HYPERPARAMS["alpha"], previous_frames))
 
