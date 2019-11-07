@@ -141,9 +141,18 @@ class FaceNet(object):
             embeds.append(n)
         return embeds if len(embeds) > 1 else embeds[0]
 
-    def predict(self, paths_or_imgs, *args, **kwargs):
+    def predict(self, paths_or_imgs, margin=None, faces=None):
+        if margin is None:
+            margin = CONSTANTS["margin"]
+
         output_tensor = self.facenet.get_tensor_by_name(self.output_name)
-        return embed(self.sess, paths_or_imgs, self.input_name, output_tensor, *args, **kwargs)
+        l2_normalize = lambda x: x / np.sqrt(np.maximum(np.sum(np.square(x), axis=-1, keepdims=True), 1e-6))
+
+        aligned_imgs = whiten(align_imgs(paths_or_imgs, margin, faces=faces))
+        raw_embeddings = self.sess.run(output_tensor, {self.input_name: aligned_imgs})
+        normalized_embeddings = l2_normalize(raw_embeddings)
+
+        return normalized_embeddings
 
 
     # FACIAL RECOGNITION HELPER
