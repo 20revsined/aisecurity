@@ -32,7 +32,7 @@ def timer(message="Time elapsed"):
 
 # KERAS TO TF
 @timer("Freezing time")
-def freeze_graph(path_to_keras_model, save_dir, save_name="frozen_graph.pb"):
+def freeze_graph(path_to_keras_model, save_dir=None, save_name="frozen_graph.pb"):
 
     tf.keras.backend.clear_session()
 
@@ -52,14 +52,15 @@ def freeze_graph(path_to_keras_model, save_dir, save_name="frozen_graph.pb"):
     output_names = [layer.op.name for layer in model.outputs]
 
     frozen_graph = _freeze_graph(session.graph, session, output_names)
-    graph_io.write_graph(frozen_graph, save_dir, save_name, as_text=False)
+    if save_dir:
+        graph_io.write_graph(frozen_graph, save_dir, save_name, as_text=False)
 
     return frozen_graph, (input_names, output_names)
 
 
 # TF TO TENSORRT
 @timer("Inference time")
-def write_inference_graph(frozen_graph, output_names, save_dir, save_name):
+def write_inference_graph(frozen_graph, output_names, save_dir=None, save_name=None):
 
     trt_graph = trt.create_inference_graph(
         input_graph_def=frozen_graph,
@@ -70,7 +71,8 @@ def write_inference_graph(frozen_graph, output_names, save_dir, save_name):
         minimum_segment_size=50
     )
 
-    graph_io.write_graph(trt_graph, save_dir, save_name, as_text=False)
+    if save_dir and save_name:
+        graph_io.write_graph(trt_graph, save_dir, save_name, as_text=False)
 
     return trt_graph
 
