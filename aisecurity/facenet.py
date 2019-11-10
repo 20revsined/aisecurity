@@ -235,7 +235,7 @@ class FaceNet(object):
                         elif "empty" in str(error):
                             print("Image refresh rate too high")
                         else:
-                            print("Unknown error: " + str(error))
+                            raise error
                         continue
 
                     # add graphics
@@ -287,9 +287,9 @@ class FaceNet(object):
 
     # GRAPHICS
     @staticmethod
-    def get_video_cap(picamera):
+    def get_video_cap(width, height, picamera):
         def _gstreamer_pipeline(capture_width=1280, capture_height=720, display_width=1280, display_height=720,
-                                framerate=60, flip_method=0):
+                                framerate=30, flip_method=0):
             return (
                 "nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, format=(string)NV12,"
                 " framerate=(fraction)%d/1 ! nvvidconv flip-method=%d ! video/x-raw, width=(int)%d, height=(int)%d,"
@@ -298,7 +298,11 @@ class FaceNet(object):
             )
 
         if picamera:
-            return cv2.VideoCapture(_gstreamer_pipeline(), cv2.CAP_GSTREAMER)
+            return cv2.VideoCapture(
+                _gstreamer_pipeline(
+                    capture_width=width, capture_height=height, display_width=width, display_height=height),
+                cv2.CAP_GSTREAMER
+            )
         else:
             return cv2.VideoCapture(0)
 
