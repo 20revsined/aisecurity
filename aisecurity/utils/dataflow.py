@@ -1,70 +1,28 @@
-
 """
 
-"aisecurity.preprocessing"
+"aisecurity.utils.dataflow"
 
-Preprocessing and data handling for FaceNet.
+Data utils.
 
 """
 
 import json
 import os
 
-import cv2
-import numpy as np
-from imageio import imread
-from mtcnn.mtcnn import MTCNN
-
-from aisecurity.encryptions import DataEncryption
-from aisecurity.extras.utils import *
+from aisecurity.privacy.encryptions import DataEncryption
+from aisecurity.utils.preprocessing import timer
 
 
-# CONSTANTS
-CONSTANTS = {
-    "margin": 10,
-    "img_size": (None, None)
-}
-
-
-# BASE FUNCTIONS
-def whiten(x):
-    std_adj = np.maximum(np.std(x, axis=(0, 1, 2), keepdims=True), 1. / np.sqrt(x.size))
-    whitened = (x - np.mean(x, axis=(0, 1, 2), keepdims=True)) / std_adj
-    return whitened
-
-
-def align_imgs(paths_or_imgs, margin, faces=None):
-    if not faces:
-        detector = MTCNN()
-
-    def align_img(path_or_img, faces=None):
-        try:
-            img = imread(path_or_img)
-        except OSError:  # if img is embedding
-            img = path_or_img
-
-        if not faces:
-            found = detector.detect_faces(img)
-            assert len(found) != 0, "face was not found in {}".format(path_or_img)
-            faces = found[0]["box"]
-
-        x, y, width, height = faces
-        cropped = img[y - margin // 2:y + height + margin // 2, x - margin // 2:x + width + margin // 2, :]
-        resized = cv2.resize(cropped, CONSTANTS["img_size"])
-        return resized
-
-    return np.array([align_img(path_or_img, faces=faces) for path_or_img in paths_or_imgs])
-
-
-# LOADING
+# LOAD ON THE FLY
 @timer(message="Data preprocessing time")
-def load(facenet, img_dir, people=None):
+def online_load(facenet, img_dir, people=None):
     if people is None:
         people = [f for f in os.listdir(img_dir) if not f.endswith(".DS_Store") and not f.endswith(".json")]
     data = {person: facenet.predict(img_dir + person) for person in people}
     return data
 
 
+# LT STORAGE
 @timer(message="Data dumping time")
 def dump_embeds(facenet, img_dir, dump_path, retrieve_path=None, full_overwrite=False, ignore_encrypt=None):
 
@@ -78,11 +36,11 @@ def dump_embeds(facenet, img_dir, dump_path, retrieve_path=None, full_overwrite=
         old_embeds = retrieve_embeds(retrieve_path if retrieve_path is not None else dump_path)
 
         new_people = [person for person in people if person not in old_embeds.keys()]
-        new_embeds = load(facenet, img_dir, people=new_people)
+        new_embeds = online_load(facenet, img_dir, people=new_people)
 
         embeds_dict = {**old_embeds, **new_embeds}  # combining dicts and overwriting any duplicates with new_embeds
     else:
-        embeds_dict = load(facenet, img_dir)
+        embeds_dict = online_load(facenet, img_dir)
 
     encrypted_data = DataEncryption.encrypt_data(embeds_dict, ignore=ignore_encrypt)
 
