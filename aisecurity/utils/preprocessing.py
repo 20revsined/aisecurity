@@ -10,9 +10,8 @@ import functools
 import time
 
 import cv2
-import numpy as np
-from imageio import imread
 from mtcnn.mtcnn import MTCNN
+import numpy as np
 
 
 # CONSTANTS
@@ -50,9 +49,9 @@ def align_imgs(paths_or_imgs, margin, faces=None):
 
     def align_img(path_or_img, faces=None):
         try:
-            img = imread(path_or_img)
-        except OSError:  # if img is embedding
-            img = path_or_img
+            img = cv2.imread(path_or_img).astype(np.uint8)
+        except SystemError:  # if img is actually image
+            img = path_or_img.astype(np.uint8)
 
         if not faces:
             found = detector.detect_faces(img)

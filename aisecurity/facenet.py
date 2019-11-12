@@ -272,35 +272,33 @@ class FaceNet(object):
         cv2.destroyAllWindows()
 
     # REAL-TIME FACIAL RECOGNITION
-    def real_time_recognize(self, width=500, height=250, use_log=True, use_dynamic=False, use_picam=False,
+    def real_time_recognize(self, width=640, height=360, use_log=True, use_dynamic=False, use_picam=False,
                             use_graphics=True):
-
         async def async_helper(recognize_func, *args, **kwargs):
             await recognize_func(*args, **kwargs)
 
         loop = asyncio.new_event_loop()
         task = loop.create_task(async_helper(self._real_time_recognize, width, height, use_log,
-                                             use_dynamic=use_dynamic, use_graphics=use_graphics, use_picam=use_picam))
+                                             use_dynamic=use_dynamic, use_graphics=use_graphics,
+                                             use_picam=use_picam))
         loop.run_until_complete(task)
+
 
     # GRAPHICS
     @staticmethod
     def get_video_cap(width, height, picamera):
-        def _gstreamer_pipeline(capture_width=1280, capture_height=720, display_width=1280, display_height=720,
+        def _gstreamer_pipeline(capture_width=1280, capture_height=720, display_width=640, display_height=360,
                                 framerate=30, flip_method=0):
             return (
-                    "nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, format=(string)NV12,"
-                    " framerate=(fraction)%d/1 ! nvvidconv flip-method=%d ! video/x-raw, width=(int)%d, height=(int)%d,"
-                    " format=(string)BGRx ! videoconvert ! video/x-raw, format=(string)BGR ! appsink"
-                    % (capture_width, capture_height, framerate, flip_method, display_width, display_height)
+                "nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, format=(string)NV12,"
+                " framerate=(fraction)%d/1 ! nvvidconv flip-method=%d ! video/x-raw, width=(int)%d, height=(int)%d,"
+                " format=(string)BGRx ! videoconvert ! video/x-raw, format=(string)BGR ! appsink"
+                % (capture_width, capture_height, framerate, flip_method, display_width, display_height)
             )
 
         if picamera:
-            return cv2.VideoCapture(
-                _gstreamer_pipeline(
-                    capture_width=width, capture_height=height, display_width=width, display_height=height),
-                cv2.CAP_GSTREAMER
-            )
+            return cv2.VideoCapture(_gstreamer_pipeline(display_width=width, display_height=height),
+                                    cv2.CAP_GSTREAMER)
         else:
             cap = cv2.VideoCapture(0)
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -353,6 +351,7 @@ class FaceNet(object):
 
         text = best_match if is_recognized else ""
         add_box_and_label(frame, corner, box, color, line_thickness, text, font_size, thickness=1)
+
 
     # DISPLAY
     def show_embeds(self, encrypted=False, single=False):
@@ -413,6 +412,7 @@ class FaceNet(object):
             # recording unknown images is deprecated and will be removed/changed later
             cv2.imwrite(path, frame)
             cprint("Unknown activity logged", color="red", attrs=["bold"])
+
 
     # DYNAMIC DATABASE
     def dynamic_update(self, embedding, l2_dists):
