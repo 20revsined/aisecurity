@@ -195,7 +195,7 @@ class FaceNet(object):
         return is_recognized, best_match, l2_dist
 
     # REAL-TIME FACIAL RECOGNITION HELPER
-    async def _real_time_recognize(self, width, height, use_log, use_dynamic, use_picam, use_graphics):
+    async def _real_time_recognize(self, width, height, use_log, use_dynamic, use_picam, use_graphics, framerate):
         db_types = ["static"]
         if use_dynamic:
             db_types.append("dynamic")
@@ -204,7 +204,7 @@ class FaceNet(object):
 
         mtcnn = MTCNN(min_face_size=0.5 * (width + height) / 3)  # face needs to fill at least 1/3 of the frame
 
-        cap = self.get_video_cap(width, height, picamera=use_picam)
+        cap = self.get_video_cap(width, height, picamera=use_picam, framerate=framerate)
 
         missed_frames = 0
         l2_dists = []
@@ -273,22 +273,22 @@ class FaceNet(object):
 
     # REAL-TIME FACIAL RECOGNITION
     def real_time_recognize(self, width=640, height=360, use_log=True, use_dynamic=False, use_picam=False,
-                            use_graphics=True):
+                            framerate=20, use_graphics=True):
         async def async_helper(recognize_func, *args, **kwargs):
             await recognize_func(*args, **kwargs)
 
         loop = asyncio.new_event_loop()
         task = loop.create_task(async_helper(self._real_time_recognize, width, height, use_log,
                                              use_dynamic=use_dynamic, use_graphics=use_graphics,
-                                             use_picam=use_picam))
+                                             use_picam=use_picam, framerate=framerate))
         loop.run_until_complete(task)
 
 
     # GRAPHICS
     @staticmethod
-    def get_video_cap(width, height, picamera):
+    def get_video_cap(width, height, picamera, framerate):
         def _gstreamer_pipeline(capture_width=1280, capture_height=720, display_width=640, display_height=360,
-                                framerate=30, flip_method=0):
+                                framerate=20, flip_method=0):
             return (
                 "nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, format=(string)NV12,"
                 " framerate=(fraction)%d/1 ! nvvidconv flip-method=%d ! video/x-raw, width=(int)%d, height=(int)%d,"
@@ -297,8 +297,9 @@ class FaceNet(object):
             )
 
         if picamera:
-            return cv2.VideoCapture(_gstreamer_pipeline(display_width=width, display_height=height),
-                                    cv2.CAP_GSTREAMER)
+            return cv2.VideoCapture(
+                _gstreamer_pipeline(display_width=width, display_height=height, framerate=framerate),
+                cv2.CAP_GSTREAMER)
         else:
             cap = cv2.VideoCapture(0)
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
