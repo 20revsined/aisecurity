@@ -222,17 +222,21 @@ class FaceNet(object):
                     # using MTCNN to detect faces
                     face = person["box"]
 
+                    if person["confidence"] < self.HYPERPARAMS["mtcnn_alpha"]:
+                        print("Face poorly detected")
+                        continue
+
                     # facial recognition
                     try:
                         embedding, is_recognized, best_match, l2_dist = self._recognize(frame, face, db_types)
                         print("L2 distance: {} ({}){}".format(l2_dist, best_match, " !" if not is_recognized else ""))
-                        if person["confidence"] < self.HYPERPARAMS["mtcnn_alpha"]:
-                            continue
                     except (ValueError, cv2.error) as error:  # error-handling using names is unstable-- change later
                         if "query data dimension" in str(error):
                             raise ValueError("Current model incompatible with database")
-                        elif "empty" in str(error) or "opencv" in str(error):
+                        elif "empty" in str(error):
                             print("Image refresh rate too high")
+                        elif "opencv" in str(error):
+                            print("Failed to capture frame")
                         else:
                             raise error
                         continue
