@@ -22,7 +22,7 @@ def online_load(facenet, img_dir, people=None):
     return data
 
 
-# LT STORAGE
+# LONG TERM STORAGE
 @timer(message="Data dumping time")
 def dump_embeds(facenet, img_dir, dump_path, retrieve_path=None, full_overwrite=False, ignore_encrypt=None):
 
