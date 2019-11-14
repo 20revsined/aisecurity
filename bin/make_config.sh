@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # ".aisecurity.make_config"
-# Program to make config file (~/.aisecurity.json)
+# Program to make config files (~/.aisecurity)
 
 if [ ! -d "$HOME/.aisecurity" ] ; then
   mkdir "$HOME/.aisecurity"
@@ -18,7 +18,7 @@ config_path=$(pwd )
 echo "Adding aisecurity.json to .aisecurity"
 touch "$HOME/.aisecurity/aisecurity.json"
 
-printf '{\n    "key_directory": "%s/keys/",\n    "key_location": "%s/keys/keys_file.json",\n    "database_location": "%s/database/encrypted.json"\n}\n' \
+printf '{\n    "key_directory": "%s/keys/",\n    "key_location": "%s/keys/keys_file.json",\n    "database_location": "%s/database/encrypted.json",\n    "mysql_user": "root",\n    "mysql_password": "root"\n}\n' \
 "$config_path" "$config_path" "$config_path" > "$config_path/aisecurity.json"
 
 if [ ! -d "$config_path/database" ] ; then
@@ -35,9 +35,9 @@ if [ ! -d "$config_path/models" ] ; then
   cd "$config_path" || echo "Error: unable to access $config_path"
   mkdir models
   cd models || echo "Error: unable to access $config_path/models"
-  wget -O "ms_celeb_1m.pb" "https://www.dropbox.com/s/ua0hhioidnhpd90/ms_celeb_1m.pb?dl=1" \
+  wget -O "ms_celeb_1m.h5" "https://www.dropbox.com/s/i4r3jbnzuzcc9fh/ms_celeb_1m.h5?dl=1" \
   || echo "Error: MS-Celeb-1M model could not be downloaded"
-  wget -O "vgg_face_2.pb" "https://www.dropbox.com/s/rixgtj6pjs9r9ob/vgg_face_2.pb?dl=1" \
+  wget -O "vgg_face_2.h5" "https://www.dropbox.com/s/4xo8uuhu9ug8ir3/vgg_face_2.h5?dl=1" \
   || echo "Error: VGGFace2 model could not be downloaded"
 fi
 
