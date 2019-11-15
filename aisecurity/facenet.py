@@ -10,6 +10,16 @@ Paper: https://arxiv.org/pdf/1503.03832.pdf
 
 import asyncio
 import warnings
+import requests
+
+try:
+	import board
+	import digitalio
+	import busio
+	from adafruit_character_lcd.character_lcd_i2c import Chaacter_LCD_I2C as character_lcd
+except ImportError:
+	raiseImportError("Install Adafruit_Python_CharLCD")
+
 
 import matplotlib.pyplot as plt
 from sklearn import neighbors
@@ -197,7 +207,7 @@ class FaceNet(object):
 
     # REAL-TIME FACIAL RECOGNITION HELPER
     async def _real_time_recognize(self, width, height, use_log, use_dynamic, use_picam, use_graphics, framerate,
-                                   resize):
+                                   resize, use_lcd = False):
         db_types = ["static"]
         if use_dynamic:
             db_types.append("dynamic")
@@ -213,6 +223,14 @@ class FaceNet(object):
 
         missed_frames = 0
         l2_dists = []
+        if use_lcd:
+        	i2c = busio.I2C(board.SCL, board.SDA)
+        	try: print(i2c.scan())
+        	except RuntimeError:
+        		raise RuntimeError("Wire configuration incorrect")
+        	columns = 16
+        	row = 2
+        	lcd = character_lcd(i2c, columns, rows, backlight_inverted=False)
 
         start = time.time()
 
@@ -250,6 +268,7 @@ class FaceNet(object):
                         raise error
                     continue
 
+
                 # add graphics
                 if use_graphics:
                     self.add_graphics(original_frame, overlay, person, width, height, is_recognized, best_match,
@@ -263,7 +282,7 @@ class FaceNet(object):
 
                     # log activity
                     if use_log:
-                        self.log_activity(is_recognized, best_match, original_frame, log_unknown=True)
+                        self.log_activity(is_recognized, best_match, original_frame, log_unknown=True, character_lcd=character_lcd)
 
                     l2_dists.append(l2_dist)
 
@@ -411,7 +430,14 @@ class FaceNet(object):
 
     # LOGGING
     @staticmethod
-    def log_activity(is_recognized, best_match, frame, log_unknown=True):
+    def log_activity(is_recognized, best_match, frame, log_unknown=True, character_lcd=None):
+    	if character_lcd:
+    		lcd.clear()
+    		r = requests.get("http://172.31.217.136:8000/kiosk/login?kiosk=1&id=12808")
+    		data = r.json()
+    		if data['accept']: lcd.message = "Welcome, %s" %(best_match)
+    		else: lcd.message("No Senior Priviliege/Invalid ID")
+
         cooldown_ok = lambda t: time.time() - t > log.THRESHOLDS["cooldown"]
         mode = lambda d: max(d.keys(), key=lambda key: d[key])
 
