@@ -436,7 +436,7 @@ class FaceNet(object):
     		r = requests.get("http://172.31.217.136:8000/kiosk/login?kiosk=1&id=12808")
     		data = r.json()
     		if data['accept']: lcd.message = "Welcome, %s" %(best_match)
-    		else: lcd.message("No Senior Priviliege/Invalid ID")
+    		else: lcd.message = "No Senior Priviliege/Invalid ID"
 
         cooldown_ok = lambda t: time.time() - t > log.THRESHOLDS["cooldown"]
         mode = lambda d: max(d.keys(), key=lambda key: d[key])
