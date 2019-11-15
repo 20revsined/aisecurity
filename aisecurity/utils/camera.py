@@ -43,7 +43,7 @@ class Camera(object):
 
     def read(self):
         if self.mode is "jetson":
-            self.display_frame, self.width, self.height = self.cap.CaptureRGBA()
+            self.display_frame, self.width, self.height = self.cap.CaptureRGBA(zeroCopy=1)
             self.frame = jetson.utils.cudaToNumpy(self.display_frame, self.width, self.height, 4)
         elif self.mode is "webcam":
             _, self.frame = self.cap.read()
