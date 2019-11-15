@@ -3,14 +3,18 @@
 "aisecurity.facenet"
 
 Facial recognition with FaceNet in Tensorflow-TensorRT (TF-TRT).
-
 Paper: https://arxiv.org/pdf/1503.03832.pdf
 
 """
 
 import asyncio
 import warnings
+import requests
 
+from adafruit_character_lcd.character_lcd_i2c import Character_LCD_I2C as character_lcd
+import busio
+import board
+import digitalio
 import matplotlib.pyplot as plt
 from sklearn import neighbors
 import tensorflow as tf
@@ -18,7 +22,7 @@ from termcolor import cprint
 
 from aisecurity.logging import log
 from aisecurity.utils.dataflow import *
-from aisecurity.utils.paths import CONFIG_HOME
+from aisecurity.utils.paths import CONFIG_HOME, CONFIG
 from aisecurity.utils.preprocessing import *
 
 
@@ -197,12 +201,19 @@ class FaceNet(object):
 
     # REAL-TIME FACIAL RECOGNITION HELPER
     async def _real_time_recognize(self, width, height, use_log, use_dynamic, use_picam, use_graphics, framerate,
-                                   resize):
+                                   resize, use_lcd=False):
         db_types = ["static"]
         if use_dynamic:
             db_types.append("dynamic")
         if use_log:
             log.init(flush=True)
+        if use_lcd:
+            i2c = busio.I2C(board.SCL, board.SDA)
+            try:
+                i2c.scan()
+            except RuntimeError:
+                raise RuntimeError("Wire configuration incorrect")
+            lcd = character_lcd(i2c, 16, 2, backlight_inverted=False)
 
         cap = self.get_video_cap(width, height, picamera=use_picam, framerate=framerate)
 
@@ -214,7 +225,7 @@ class FaceNet(object):
         missed_frames = 0
         l2_dists = []
 
-        start = time.time()
+        frames = 0
 
         while True:
             _, frame = cap.read()
@@ -250,12 +261,13 @@ class FaceNet(object):
                         raise error
                     continue
 
+
                 # add graphics
                 if use_graphics:
                     self.add_graphics(original_frame, overlay, person, width, height, is_recognized, best_match,
-                                      resize)
+                                      resize, lcd if use_lcd else None)
 
-                if time.time() - start > 5.:  # wait 5 seconds before logging starts
+                if frames > 5:  # wait 5 frames before logging starts
 
                     # update dynamic database
                     if use_dynamic:
@@ -282,20 +294,23 @@ class FaceNet(object):
 
             await asyncio.sleep(1e-6)
 
+            frames += 1
+
         cap.release()
         cv2.destroyAllWindows()
 
     # REAL-TIME FACIAL RECOGNITION
     def real_time_recognize(self, width=640, height=360, use_log=True, use_dynamic=False, use_picam=False,
-                            framerate=20, use_graphics=True, resize=None):
+                            framerate=20, use_graphics=True, resize=None, use_lcd = False):
         async def async_helper(recognize_func, *args, **kwargs):
             await recognize_func(*args, **kwargs)
 
         loop = asyncio.new_event_loop()
         task = loop.create_task(async_helper(self._real_time_recognize, width, height, use_log,
                                              use_dynamic=use_dynamic, use_graphics=use_graphics,
-                                             use_picam=use_picam, framerate=framerate, resize=resize))
+                                             use_picam=use_picam, framerate=framerate, resize=resize, use_lcd = use_lcd))
         loop.run_until_complete(task)
+
 
     # GRAPHICS
     @staticmethod
@@ -320,11 +335,10 @@ class FaceNet(object):
             return cap
 
     @staticmethod
-    def add_graphics(frame, overlay, person, width, height, is_recognized, best_match, resize):
+    def add_graphics(frame, overlay, person, width, height, is_recognized, best_match, resize, lcd):
         line_thickness = round(1e-6 * width * height + 1.5)
         radius = round((1e-6 * width * height + 1.5) / 2.)
         font_size = 4.5e-7 * width * height + 0.5
-
         # works for 6.25e4 pixel video cature to 1e6 pixel video capture
 
         def get_color(is_recognized, best_match):
@@ -354,6 +368,15 @@ class FaceNet(object):
             cv2.line(overlay, features["mouth_left"], features["nose"], color, radius)
             cv2.line(overlay, features["mouth_right"], features["nose"], color, radius)
 
+        def add_lcd_display(lcd):
+            lcd.clear()
+            request = requests.get(CONFIG["server_address"])
+            data = request.json()
+            if data["accept"]:
+                lcd.message = "ID Accepted \n{}".format(best_match)
+            else:
+                lcd.message = "No Senior Priv\n{}".format(best_match)
+
         features = person["keypoints"]
         x, y, height, width = person["box"]
 
@@ -377,6 +400,9 @@ class FaceNet(object):
 
         text = best_match if is_recognized else ""
         add_box_and_label(frame, origin, corner, color, line_thickness, text, font_size, thickness=1)
+
+        if lcd:
+            add_lcd_display(lcd)
 
 
     # DISPLAY
