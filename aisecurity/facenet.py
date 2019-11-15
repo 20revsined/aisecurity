@@ -39,7 +39,7 @@ class FaceNet(object):
     # HYPERPARAMETERS
     HYPERPARAMS = {
         "alpha": 0.7,
-        "mtcnn_alpha": 0.99
+        "mtcnn_alpha": 0.85
     }
 
 
