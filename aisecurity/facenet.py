@@ -275,7 +275,7 @@ class FaceNet(object):
 
                     # log activity
                     if use_log:
-                        self.log_activity(is_recognized, best_match, original_frame, log_unknown=True, character_lcd=lcd)
+                        self.log_activity(is_recognized, best_match, original_frame, log_unknown=True)
 
                     l2_dists.append(l2_dist)
 
@@ -373,9 +373,9 @@ class FaceNet(object):
             request = requests.get(CONFIG["server_address"])
             data = request.json()
             if data["accept"]:
-                lcd.message = "Welcome, {}".format(best_match)
+                lcd.message = "ID Accepted \n{}".format(best_match)
             else:
-                lcd.message = "{}: No Senior Priviliege/Invalid ID".format(best_match)
+                lcd.message = "No Senior Priv\n{}".format(best_match)
 
         features = person["keypoints"]
         x, y, height, width = person["box"]
@@ -437,7 +437,7 @@ class FaceNet(object):
 
     # LOGGING
     @staticmethod
-    def log_activity(is_recognized, best_match, frame, log_unknown=True, lcd=None):
+    def log_activity(is_recognized, best_match, frame, log_unknown=True):
         cooldown_ok = lambda t: time.time() - t > log.THRESHOLDS["cooldown"]
         mode = lambda d: max(d.keys(), key=lambda key: d[key])
 
