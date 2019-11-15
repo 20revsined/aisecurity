@@ -8,15 +8,11 @@ import asyncio
 import warnings
 import requests
 
-try:
-	import board
-	import digitalio
-	import busio
-	from adafruit_character_lcd.character_lcd_i2c import Chaacter_LCD_I2C as character_lcd
-except ImportError:
-	raiseImportError("Install Adafruit_Python_CharLCD")
 
-
+from adafruit_character_lcd.character_lcd_i2c import Character_LCD_I2C as character_lcd
+import busio
+import board
+import digitalio
 import matplotlib.pyplot as plt
 from sklearn import neighbors
 import tensorflow as tf
@@ -203,12 +199,19 @@ class FaceNet(object):
 
     # REAL-TIME FACIAL RECOGNITION HELPER
     async def _real_time_recognize(self, width, height, use_log, use_dynamic, use_picam, use_graphics, framerate,
-                                   resize, use_lcd = False):
+                                   resize, use_lcd=False):
         db_types = ["static"]
         if use_dynamic:
             db_types.append("dynamic")
         if use_log:
             log.init(flush=True)
+        if use_lcd:
+            i2c = busio.I2C(board.SCL, board.SDA)
+            try:
+                i2c.scan()
+            except RuntimeError:
+                raise RuntimeError("Wire configuration incorrect")
+            lcd = character_lcd(i2c, columns=16, rows=2, backlight_inverted=False)
 
         cap = self.get_video_cap(width, height, picamera=use_picam, framerate=framerate)
 
@@ -221,14 +224,6 @@ class FaceNet(object):
         l2_dists = []
 
         frames = 0
-        if use_lcd:
-        	i2c = busio.I2C(board.SCL, board.SDA)
-        	try: print(i2c.scan())
-        	except RuntimeError:
-        		raise RuntimeError("Wire configuration incorrect")
-        	columns = 16
-        	row = 2
-        	lcd = character_lcd(i2c, columns, rows, backlight_inverted=False)
 
         while True:
             _, frame = cap.read()
@@ -268,7 +263,7 @@ class FaceNet(object):
                 # add graphics
                 if use_graphics:
                     self.add_graphics(original_frame, overlay, person, width, height, is_recognized, best_match,
-                                      resize)
+                                      resize, lcd if use_lcd else None)
 
                 if frames > 5:  # wait 5 frames before logging starts
 
@@ -314,6 +309,7 @@ class FaceNet(object):
                                              use_picam=use_picam, framerate=framerate, resize=resize, use_lcd = use_lcd))
         loop.run_until_complete(task)
 
+
     # GRAPHICS
     @staticmethod
     def get_video_cap(width, height, picamera, framerate):
@@ -337,11 +333,10 @@ class FaceNet(object):
             return cap
 
     @staticmethod
-    def add_graphics(frame, overlay, person, width, height, is_recognized, best_match, resize):
+    def add_graphics(frame, overlay, person, width, height, is_recognized, best_match, resize, lcd):
         line_thickness = round(1e-6 * width * height + 1.5)
         radius = round((1e-6 * width * height + 1.5) / 2.)
         font_size = 4.5e-7 * width * height + 0.5
-
         # works for 6.25e4 pixel video cature to 1e6 pixel video capture
 
         def get_color(is_recognized, best_match):
@@ -371,6 +366,15 @@ class FaceNet(object):
             cv2.line(overlay, features["mouth_left"], features["nose"], color, radius)
             cv2.line(overlay, features["mouth_right"], features["nose"], color, radius)
 
+        def add_lcd_display(lcd):
+            lcd.clear()
+            request = requests.get("http://172.31.217.136:8000/kiosk/login?kiosk=1&id=12808")
+            data = request.json()
+            if data["accept"]:
+                lcd.message = "Welcome, {}".format(best_match)
+            else:
+                lcd.message = "{}: No Senior Priviliege/Invalid ID".format(best_match)
+
         features = person["keypoints"]
         x, y, height, width = person["box"]
 
@@ -394,6 +398,9 @@ class FaceNet(object):
 
         text = best_match if is_recognized else ""
         add_box_and_label(frame, origin, corner, color, line_thickness, text, font_size, thickness=1)
+
+        if lcd:
+            add_lcd_display(lcd)
 
 
     # DISPLAY
@@ -429,15 +436,6 @@ class FaceNet(object):
     # LOGGING
     @staticmethod
     def log_activity(is_recognized, best_match, frame, log_unknown=True, lcd=None):
-        if lcd:
-            lcd.clear()
-            request = requests.get("http://172.31.217.136:8000/kiosk/login?kiosk=1&id=12808")
-            data = request.json()
-            if data["accept"]:
-                lcd.message = "Welcome, {}".format(best_match)
-            else:
-                lcd.message = "{}: No Senior Priviliege/Invalid ID".format(best_match)
-
         cooldown_ok = lambda t: time.time() - t > log.THRESHOLDS["cooldown"]
         mode = lambda d: max(d.keys(), key=lambda key: d[key])
 
