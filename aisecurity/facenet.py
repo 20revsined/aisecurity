@@ -282,7 +282,7 @@ class FaceNet(object):
 
                     # log activity
                     if use_log:
-                        self.log_activity(is_recognized, best_match, original_frame, log_unknown=True, character_lcd=character_lcd)
+                        self.log_activity(is_recognized, best_match, original_frame, log_unknown=True, character_lcd=lcd)
 
                     l2_dists.append(l2_dist)
 
