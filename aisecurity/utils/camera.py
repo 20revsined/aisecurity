@@ -44,7 +44,9 @@ class Camera(object):
         if self.mode is "jetson":
             self.frame, self.width, self.height = self.cap.CaptureRGBA()
         elif self.mode is "webcam":
+            from termcolor import cprint; cprint('using webcam', color="red")
             _, self.frame = self.cap.read()
+
 
     def imshow(self, frame, title):
         if self.mode is "jetson":
