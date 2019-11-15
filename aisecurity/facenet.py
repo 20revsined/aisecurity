@@ -21,6 +21,7 @@ import tensorflow as tf
 from termcolor import cprint
 
 from aisecurity.logging import log
+from aisecurity.utils.camera import *
 from aisecurity.utils.dataflow import *
 from aisecurity.utils.paths import CONFIG_HOME, CONFIG
 from aisecurity.utils.preprocessing import *
@@ -200,8 +201,7 @@ class FaceNet(object):
 
 
     # REAL-TIME FACIAL RECOGNITION HELPER
-    async def _real_time_recognize(self, width, height, use_log, use_dynamic, use_picam, use_graphics, framerate,
-                                   resize, use_lcd=False):
+    async def _real_time_recognize(self, width, height, use_log, use_dynamic, use_picam, use_graphics, resize, use_lcd):
         db_types = ["static"]
         if use_dynamic:
             db_types.append("dynamic")
@@ -214,8 +214,10 @@ class FaceNet(object):
             except RuntimeError:
                 raise RuntimeError("Wire configuration incorrect")
             lcd = character_lcd(i2c, 16, 2, backlight_inverted=False)
+        if use_picam:
+            warnings.warn("graphics cannot be used with picamera")
 
-        cap = self.get_video_cap(width, height, picamera=use_picam, framerate=framerate)
+        self.cap = Camera("jetson" if use_picam else "webcam")
 
         if resize:
             width, height = width * resize, height * resize
@@ -228,7 +230,7 @@ class FaceNet(object):
         frames = 0
 
         while True:
-            _, frame = cap.read()
+            _, frame = self.cap.read()
             original_frame = frame.copy()
             if resize:
                 frame = cv2.resize(frame, (0, 0), fx=resize, fy=resize)
@@ -263,9 +265,9 @@ class FaceNet(object):
 
 
                 # add graphics
-                if use_graphics:
-                    self.add_graphics(original_frame, overlay, person, width, height, is_recognized, best_match,
-                                      resize, lcd if use_lcd else None)
+                if use_graphics and not use_picam:
+                    self.cap.add_graphics(original_frame, overlay, person, width, height, is_recognized, best_match,
+                                          resize, lcd if use_lcd else None)
 
                 if frames > 5:  # wait 5 frames before logging starts
 
@@ -287,7 +289,7 @@ class FaceNet(object):
                     l2_dists = []
                 print("No face detected")
 
-            cv2.imshow("AI Security v1.0a", original_frame)
+            self.cap.imshow("AI Security v1.0a", original_frame)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
@@ -296,7 +298,7 @@ class FaceNet(object):
 
             frames += 1
 
-        cap.release()
+        self.cap.release()
         cv2.destroyAllWindows()
 
     # REAL-TIME FACIAL RECOGNITION
@@ -308,101 +310,8 @@ class FaceNet(object):
         loop = asyncio.new_event_loop()
         task = loop.create_task(async_helper(self._real_time_recognize, width, height, use_log,
                                              use_dynamic=use_dynamic, use_graphics=use_graphics,
-                                             use_picam=use_picam, framerate=framerate, resize=resize, use_lcd = use_lcd))
+                                             use_picam=use_picam, framerate=framerate, resize=resize, use_lcd=use_lcd))
         loop.run_until_complete(task)
-
-
-    # GRAPHICS
-    @staticmethod
-    def get_video_cap(width, height, picamera, framerate):
-        def _gstreamer_pipeline(capture_width=1280, capture_height=720, display_width=640, display_height=360,
-                                framerate=20, flip_method=0):
-            return (
-                "nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, format=(string)NV12,"
-                " framerate=(fraction)%d/1 ! nvvidconv flip-method=%d ! video/x-raw, width=(int)%d, height=(int)%d,"
-                " format=(string)BGRx ! videoconvert ! video/x-raw, format=(string)BGR ! appsink"
-                % (capture_width, capture_height, framerate, flip_method, display_width, display_height)
-            )
-
-        if picamera:
-            return cv2.VideoCapture(
-                _gstreamer_pipeline(display_width=width, display_height=height, framerate=framerate),
-                cv2.CAP_GSTREAMER)
-        else:
-            cap = cv2.VideoCapture(0)
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-            return cap
-
-    @staticmethod
-    def add_graphics(frame, overlay, person, width, height, is_recognized, best_match, resize, lcd):
-        line_thickness = round(1e-6 * width * height + 1.5)
-        radius = round((1e-6 * width * height + 1.5) / 2.)
-        font_size = 4.5e-7 * width * height + 0.5
-        # works for 6.25e4 pixel video cature to 1e6 pixel video capture
-
-        def get_color(is_recognized, best_match):
-            if not is_recognized:
-                return 0, 0, 255  # red
-            elif "visitor" in best_match:
-                return 218, 112, 214  # purple (actually more of an "orchid")
-            else:
-                return 0, 255, 0  # green
-
-        def add_box_and_label(frame, origin, corner, color, line_thickness, best_match, font_size, thickness):
-            cv2.rectangle(frame, origin, corner, color, line_thickness)
-            # label box
-            cv2.rectangle(frame, (origin[0], corner[1] - 35), corner, color, cv2.FILLED)
-            cv2.putText(frame, best_match.replace("_", " ").title(), (origin[0] + 6, corner[1] - 6),
-                        cv2.FONT_HERSHEY_DUPLEX, font_size, (255, 255, 255), thickness)  # white text
-
-        def add_features(overlay, features, radius, color, line_thickness):
-            cv2.circle(overlay, (features["left_eye"]), radius, color, line_thickness)
-            cv2.circle(overlay, (features["right_eye"]), radius, color, line_thickness)
-            cv2.circle(overlay, (features["nose"]), radius, color, line_thickness)
-            cv2.circle(overlay, (features["mouth_left"]), radius, color, line_thickness)
-            cv2.circle(overlay, (features["mouth_right"]), radius, color, line_thickness)
-
-            cv2.line(overlay, features["left_eye"], features["nose"], color, radius)
-            cv2.line(overlay, features["right_eye"], features["nose"], color, radius)
-            cv2.line(overlay, features["mouth_left"], features["nose"], color, radius)
-            cv2.line(overlay, features["mouth_right"], features["nose"], color, radius)
-
-        def add_lcd_display(lcd):
-            lcd.clear()
-            request = requests.get(CONFIG["server_address"])
-            data = request.json()
-            if data["accept"]:
-                lcd.message = "ID Accepted \n{}".format(best_match)
-            else:
-                lcd.message = "No Senior Priv\n{}".format(best_match)
-
-        features = person["keypoints"]
-        x, y, height, width = person["box"]
-
-        if resize:
-            scale_factor = 1. / resize
-
-            scale = lambda x: tuple(round(element * scale_factor) for element in x)
-            features = {feature: scale(features[feature]) for feature in features}
-
-            scale = lambda *xs: tuple(round(x * scale_factor) for x in xs)
-            x, y, height, width = scale(x, y, height, width)
-
-        color = get_color(is_recognized, best_match)
-
-        margin = CONSTANTS["margin"]
-        origin = (x - margin // 2, y - margin // 2)
-        corner = (x + height + margin // 2, y + width + margin // 2)
-
-        add_features(overlay, features, radius, color, line_thickness)
-        cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
-
-        text = best_match if is_recognized else ""
-        add_box_and_label(frame, origin, corner, color, line_thickness, text, font_size, thickness=1)
-
-        if lcd:
-            add_lcd_display(lcd)
 
 
     # DISPLAY
