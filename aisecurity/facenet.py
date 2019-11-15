@@ -218,6 +218,7 @@ class FaceNet(object):
             warnings.warn("graphics cannot be used with picamera")
 
         self.cap = Camera("jetson" if use_picam else "webcam")
+        print(self.cap.mode)
 
         if resize:
             width, height = width * resize, height * resize
