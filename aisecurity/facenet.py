@@ -20,7 +20,7 @@ from termcolor import cprint
 
 from aisecurity.logging import log
 from aisecurity.utils.dataflow import *
-from aisecurity.utils.paths import CONFIG_HOME
+from aisecurity.utils.paths import CONFIG_HOME, CONFIG
 from aisecurity.utils.preprocessing import *
 
 
@@ -368,7 +368,7 @@ class FaceNet(object):
 
         def add_lcd_display(lcd):
             lcd.clear()
-            request = requests.get("http://172.31.217.136:8000/kiosk/login?kiosk=1&id=12808")
+            request = requests.get(CONFIG["server_address"])
             data = request.json()
             if data["accept"]:
                 lcd.message = "Welcome, {}".format(best_match)
