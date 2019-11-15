@@ -1,13 +1,15 @@
 """
+
 "aisecurity.facenet"
+
 Facial recognition with FaceNet in Tensorflow-TensorRT (TF-TRT).
 Paper: https://arxiv.org/pdf/1503.03832.pdf
+
 """
 
 import asyncio
 import warnings
 import requests
-
 
 from adafruit_character_lcd.character_lcd_i2c import Character_LCD_I2C as character_lcd
 import busio
