@@ -433,13 +433,12 @@ class FaceNet(object):
     def log_activity(is_recognized, best_match, frame, log_unknown=True, lcd=None):
 		if lcd:
 			lcd.clear()
-			r = requests.get("http://172.31.217.136:8000/kiosk/login?kiosk=1&id=12808")
-			data = r.json()
+			request = requests.get("http://172.31.217.136:8000/kiosk/login?kiosk=1&id=12808")
+			data = request.json()
 			if data["accept"]:
 				lcd.message = "Welcome, %s" % (best_match)
 			else:
 				lcd.message = "%s: No Senior Priviliege/Invalid ID" % (best_match)
-
         cooldown_ok = lambda t: time.time() - t > log.THRESHOLDS["cooldown"]
         mode = lambda d: max(d.keys(), key=lambda key: d[key])
 
