@@ -1,26 +1,31 @@
 """
-
 "aisecurity.facenet"
-
-Facial recognition with FaceNet in Keras.
-
+Facial recognition with FaceNet in Tensorflow-TensorRT (TF-TRT).
 Paper: https://arxiv.org/pdf/1503.03832.pdf
-
 """
 
 import asyncio
 import warnings
+import requests
 
-import keras
-from keras import backend as K
+try:
+	import board
+	import digitalio
+	import busio
+	from adafruit_character_lcd.character_lcd_i2c import Chaacter_LCD_I2C as character_lcd
+except ImportError:
+	raiseImportError("Install Adafruit_Python_CharLCD")
+
+
 import matplotlib.pyplot as plt
 from sklearn import neighbors
+import tensorflow as tf
 from termcolor import cprint
 
 from aisecurity.logging import log
+from aisecurity.utils.dataflow import *
 from aisecurity.utils.paths import CONFIG_HOME
 from aisecurity.utils.preprocessing import *
-from aisecurity.utils.dataflow import *
 
 
 # FACENET
@@ -29,21 +34,61 @@ class FaceNet(object):
 
     # HYPERPARAMETERS
     HYPERPARAMS = {
-        "alpha": 0.8,
-        "mtcnn_alpha": 0.99
+        "alpha": 0.7,
+        "mtcnn_alpha": 0.85
+    }
+
+
+    # CONSTANTS
+    CONSTANTS = {
+        "ms_celeb_1m": {
+            "inputs": ["input_1"],
+            "outputs": ["Bottleneck_BatchNorm/batchnorm/add_1"]
+        },
+        "vgg_face_2": {
+            "inputs": ["base_input"],
+            "outputs": ["classifier_low_dim/Softmax"]
+        }
     }
 
 
     # INITS
     @timer(message="Model load time")
-    def __init__(self, filepath=CONFIG_HOME + "/models/ms_celeb_1m.h5"):
+    def __init__(self, filepath=CONFIG_HOME + "/models/ms_celeb_1m.pb", input_name=None, output_name=None):
         assert os.path.exists(filepath), "{} not found".format(filepath)
-        self.facenet = keras.models.load_model(filepath)
 
+        # get frozen graph info and set sess
+        self._sess_init(filepath, input_name, output_name)
+
+        # data init
         self.__static_db = None  # must be filled in by user
         self.__dynamic_db = {}  # used for real-time database updating (i.e., for visitors)
 
-        CONSTANTS["img_size"] = (self.facenet.input_shape[1], self.facenet.input_shape[1])
+    def _sess_init(self, filepath, input_name, output_name):
+        trt_graph = self.get_frozen_graph(filepath)
+
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        self.sess = tf.Session(config=config)
+
+        tf.import_graph_def(trt_graph, name="")
+
+        self._io_tensor_init(model_name=filepath, input_name=input_name, output_name=output_name)
+
+        self.facenet = self.sess.graph
+        CONSTANTS["img_size"] = tuple(self.facenet.get_tensor_by_name(self.input_name).get_shape().as_list()[1:3])
+
+    def _io_tensor_init(self, model_name, input_name, output_name):
+        self.input_name, self.output_name = None, None
+        for model in self.CONSTANTS:
+            if model in model_name:
+                self.input_name = self.CONSTANTS[model]["inputs"][0] + ":0"
+                self.output_name = self.CONSTANTS[model]["outputs"][0] + ":0"
+        if not self.input_name:
+            self.input_name = input_name
+        elif not self.output_name:
+            self.output_name = output_name
+        assert self.input_name and self.output_name, "I/O tensors for {} not detected or provided".format(model_name)
 
 
     # MUTATORS
@@ -84,6 +129,13 @@ class FaceNet(object):
     def data(self):
         return self.__static_db
 
+    @staticmethod
+    def get_frozen_graph(path):
+        with tf.gfile.FastGFile(path, "rb") as graph_file:
+            graph_def = tf.GraphDef()
+            graph_def.ParseFromString(graph_file.read())
+        return graph_def
+
     def get_embeds(self, data, *args, **kwargs):
         embeds = []
         for n in args:
@@ -97,11 +149,15 @@ class FaceNet(object):
             embeds.append(n)
         return embeds if len(embeds) > 1 else embeds[0]
 
-    def predict(self, paths_or_imgs, margin=CONSTANTS["margin"], faces=None):
-        l2_normalize = lambda x: x / np.sqrt(np.maximum(np.sum(np.square(x), axis=-1, keepdims=True), K.epsilon()))
+    def predict(self, paths_or_imgs, margin=None, faces=None):
+        if margin is None:
+            margin = CONSTANTS["margin"]
+
+        output_tensor = self.facenet.get_tensor_by_name(self.output_name)
+        l2_normalize = lambda x: x / np.sqrt(np.maximum(np.sum(np.square(x), axis=-1, keepdims=True), 1e-6))
 
         aligned_imgs = whiten(align_imgs(paths_or_imgs, margin, faces=faces))
-        raw_embeddings = self.facenet.predict(aligned_imgs)
+        raw_embeddings = self.sess.run(output_tensor, {self.input_name: aligned_imgs})
         normalized_embeddings = l2_normalize(raw_embeddings)
 
         return normalized_embeddings
@@ -147,7 +203,7 @@ class FaceNet(object):
 
     # REAL-TIME FACIAL RECOGNITION HELPER
     async def _real_time_recognize(self, width, height, use_log, use_dynamic, use_picam, use_graphics, framerate,
-                                   resize):
+                                   resize, use_lcd = False):
         db_types = ["static"]
         if use_dynamic:
             db_types.append("dynamic")
@@ -165,6 +221,14 @@ class FaceNet(object):
         l2_dists = []
 
         frames = 0
+        if use_lcd:
+        	i2c = busio.I2C(board.SCL, board.SDA)
+        	try: print(i2c.scan())
+        	except RuntimeError:
+        		raise RuntimeError("Wire configuration incorrect")
+        	columns = 16
+        	row = 2
+        	lcd = character_lcd(i2c, columns, rows, backlight_inverted=False)
 
         while True:
             _, frame = cap.read()
@@ -188,10 +252,8 @@ class FaceNet(object):
                 # facial recognition
                 try:
                     embedding, is_recognized, best_match, l2_dist = self._recognize(frame, face, db_types)
-                    print(
-                        "L2 distance: {} ({}){}".format(l2_dist, best_match, " !" if not is_recognized else ""))
-                except (
-                ValueError, cv2.error) as error:  # error-handling using names is unstable-- change later
+                    print("L2 distance: {} ({}){}".format(l2_dist, best_match, " !" if not is_recognized else ""))
+                except (ValueError, cv2.error) as error:  # error-handling using names is unstable-- change later
                     if "query data dimension" in str(error):
                         raise ValueError("Current model incompatible with database")
                     elif "empty" in str(error):
@@ -201,6 +263,7 @@ class FaceNet(object):
                     else:
                         raise error
                     continue
+
 
                 # add graphics
                 if use_graphics:
@@ -215,7 +278,7 @@ class FaceNet(object):
 
                     # log activity
                     if use_log:
-                        self.log_activity(is_recognized, best_match, original_frame, log_unknown=True)
+                        self.log_activity(is_recognized, best_match, original_frame, log_unknown=True, character_lcd=lcd)
 
                     l2_dists.append(l2_dist)
 
@@ -232,25 +295,24 @@ class FaceNet(object):
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
-            frames += 1
-
             await asyncio.sleep(1e-6)
+
+            frames += 1
 
         cap.release()
         cv2.destroyAllWindows()
 
     # REAL-TIME FACIAL RECOGNITION
     def real_time_recognize(self, width=640, height=360, use_log=True, use_dynamic=False, use_picam=False,
-                            framerate=20, use_graphics=True, resize=None):
+                            framerate=20, use_graphics=True, resize=None, use_lcd = False):
         async def async_helper(recognize_func, *args, **kwargs):
             await recognize_func(*args, **kwargs)
 
         loop = asyncio.new_event_loop()
         task = loop.create_task(async_helper(self._real_time_recognize, width, height, use_log,
                                              use_dynamic=use_dynamic, use_graphics=use_graphics,
-                                             use_picam=use_picam, framerate=framerate, resize=resize))
+                                             use_picam=use_picam, framerate=framerate, resize=resize, use_lcd = use_lcd))
         loop.run_until_complete(task)
-
 
     # GRAPHICS
     @staticmethod
@@ -258,10 +320,10 @@ class FaceNet(object):
         def _gstreamer_pipeline(capture_width=1280, capture_height=720, display_width=640, display_height=360,
                                 framerate=20, flip_method=0):
             return (
-                    "nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, format=(string)NV12,"
-                    " framerate=(fraction)%d/1 ! nvvidconv flip-method=%d ! video/x-raw, width=(int)%d, height=(int)%d,"
-                    " format=(string)BGRx ! videoconvert ! video/x-raw, format=(string)BGR ! appsink"
-                    % (capture_width, capture_height, framerate, flip_method, display_width, display_height)
+                "nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, format=(string)NV12,"
+                " framerate=(fraction)%d/1 ! nvvidconv flip-method=%d ! video/x-raw, width=(int)%d, height=(int)%d,"
+                " format=(string)BGRx ! videoconvert ! video/x-raw, format=(string)BGR ! appsink"
+                % (capture_width, capture_height, framerate, flip_method, display_width, display_height)
             )
 
         if picamera:
@@ -279,6 +341,7 @@ class FaceNet(object):
         line_thickness = round(1e-6 * width * height + 1.5)
         radius = round((1e-6 * width * height + 1.5) / 2.)
         font_size = 4.5e-7 * width * height + 0.5
+
         # works for 6.25e4 pixel video cature to 1e6 pixel video capture
 
         def get_color(is_recognized, best_match):
@@ -363,10 +426,17 @@ class FaceNet(object):
             if single and person == list(data.keys())[0]:
                 break
 
-
     # LOGGING
     @staticmethod
-    def log_activity(is_recognized, best_match, frame, log_unknown=True):
+    def log_activity(is_recognized, best_match, frame, log_unknown=True, lcd=None):
+        if lcd:
+            lcd.clear()
+            request = requests.get("http://172.31.217.136:8000/kiosk/login?kiosk=1&id=12808")
+            data = request.json()
+            if data["accept"]:
+                lcd.message = "Welcome, {}".format(best_match)
+            else:
+                lcd.message = "{}: No Senior Priviliege/Invalid ID".format(best_match)
 
         cooldown_ok = lambda t: time.time() - t > log.THRESHOLDS["cooldown"]
         mode = lambda d: max(d.keys(), key=lambda key: d[key])

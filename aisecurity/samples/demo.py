@@ -1,14 +1,11 @@
 """
-
 "aisecurity.samples.demo"
-
 Demonstration of facial recognition system.
-
 """
 
 
 def demo(model="ms_celeb_1m", path=None, use_log=True, use_dynamic=True, use_picam=False, use_graphics=True,
-         resize=None, verbose=False):
+         resize=None, verbose=False, use_lcd=False):
 
     # default arg values (for Pycharm, where args.* default to None)
     if model is None:
@@ -51,7 +48,7 @@ def demo(model="ms_celeb_1m", path=None, use_log=True, use_dynamic=True, use_pic
 
     cprint("\nLoading facial recognition system", attrs=["bold"], end="")
     cprint("...", attrs=["bold", "blink"])
-    facenet = FaceNet(path if path else CONFIG_HOME + "/models/{}.h5".format(model))
+    facenet = FaceNet(path if path else CONFIG_HOME + "/models/{}.pb".format(model))
 
     cprint("\nLoading encrypted database", attrs=["bold"], end="")
     cprint("...", attrs=["bold", "blink"])
@@ -60,7 +57,7 @@ def demo(model="ms_celeb_1m", path=None, use_log=True, use_dynamic=True, use_pic
     input("\nPress ENTER to continue:")
 
     facenet.real_time_recognize(use_log=use_log, use_dynamic=use_dynamic, use_picam=use_picam,
-                                use_graphics=use_graphics, resize=resize)
+                                use_graphics=use_graphics, resize=resize, use_lcd=use_lcd)
 
 
 if __name__ == "__main__":
