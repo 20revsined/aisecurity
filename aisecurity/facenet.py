@@ -430,8 +430,8 @@ class FaceNet(object):
 
     # LOGGING
     @staticmethod
-    def log_activity(is_recognized, best_match, frame, log_unknown=True, character_lcd=None):
-    	if character_lcd:
+    def log_activity(is_recognized, best_match, frame, log_unknown=True, lcd=None):
+    	if lcd:
     		lcd.clear()
     		r = requests.get("http://172.31.217.136:8000/kiosk/login?kiosk=1&id=12808")
     		data = r.json()
