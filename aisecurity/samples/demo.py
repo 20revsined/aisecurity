@@ -8,7 +8,7 @@ Demonstration of facial recognition system.
 
 
 def demo(model="ms_celeb_1m", path=None, use_log=True, use_dynamic=True, use_picam=False, use_graphics=True,
-         resize=None, verbose=False):
+         resize=None, verbose=False, use_lcd=False):
 
     # default arg values (for Pycharm, where args.* default to None)
     if model is None:
@@ -60,7 +60,7 @@ def demo(model="ms_celeb_1m", path=None, use_log=True, use_dynamic=True, use_pic
     input("\nPress ENTER to continue:")
 
     facenet.real_time_recognize(use_log=use_log, use_dynamic=use_dynamic, use_picam=use_picam,
-                                use_graphics=use_graphics, resize=resize)
+                                use_graphics=use_graphics, resize=resize, use_lcd=False)
 
 
 if __name__ == "__main__":

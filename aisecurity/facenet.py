@@ -306,14 +306,14 @@ class FaceNet(object):
 
     # REAL-TIME FACIAL RECOGNITION
     def real_time_recognize(self, width=640, height=360, use_log=True, use_dynamic=False, use_picam=False,
-                            framerate=20, use_graphics=True, resize=None):
+                            framerate=20, use_graphics=True, resize=None, use_lcd = False):
         async def async_helper(recognize_func, *args, **kwargs):
             await recognize_func(*args, **kwargs)
 
         loop = asyncio.new_event_loop()
         task = loop.create_task(async_helper(self._real_time_recognize, width, height, use_log,
                                              use_dynamic=use_dynamic, use_graphics=use_graphics,
-                                             use_picam=use_picam, framerate=framerate, resize=resize))
+                                             use_picam=use_picam, framerate=framerate, resize=resize, use_lcd = use_lcd))
         loop.run_until_complete(task)
 
     # GRAPHICS
