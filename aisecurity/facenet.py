@@ -230,7 +230,8 @@ class FaceNet(object):
         frames = 0
 
         while True:
-            _, frame = self.cap.read()
+            self.cap.read()
+            frame = self.cap.frame
             original_frame = frame.copy()
             if resize:
                 frame = cv2.resize(frame, (0, 0), fx=resize, fy=resize)
