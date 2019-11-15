@@ -33,6 +33,7 @@ class Camera(object):
         if mode is "jetson":
             self.cap = jetson.utils.gstCamera(width, height)
             self.display = jetson.utils.glDisplay()
+            print(self.cap)
         elif mode is "webcam":
             self.cap = cv2.VideoCapture(0)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -43,9 +44,8 @@ class Camera(object):
     def read(self):
         if self.mode is "jetson":
             self.frame, self.width, self.height = self.cap.CaptureRGBA()
-        elif self.mode is "webcam":
-            from termcolor import cprint; cprint('using webcam', color="red")
-            _, self.frame = self.cap.read()
+        # elif self.mode is "webcam":
+        #     _, self.frame = self.cap.read()
 
 
     def imshow(self, frame, title):
