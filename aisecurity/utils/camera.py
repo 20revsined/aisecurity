@@ -48,7 +48,6 @@ class Camera(object):
         elif self.mode is "webcam":
             _, self.frame = self.cap.read()
 
-
     def imshow(self, frame, title):
         if self.mode is "jetson":
             self.display.RenderOnce(self.frame, self.width, self.height)
