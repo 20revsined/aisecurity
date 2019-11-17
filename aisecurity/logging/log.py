@@ -22,11 +22,12 @@ CURSOR = None
 FIREBASE = None
 
 THRESHOLDS = {
-    "num_recognized": 5,
+    "num_recognized": 3,
     "num_unknown": 5,
     "percent_diff": 0.2,
     "cooldown": 10.,
-    "missed_frames": 10
+    "missed_frames": 10,
+    "refresh_rate": 3.
 }
 
 num_recognized = 0
@@ -36,6 +37,7 @@ last_logged = time.time() - THRESHOLDS["cooldown"] + 0.1  # don't log for first 
 unk_last_logged = time.time() - THRESHOLDS["cooldown"] + 0.1
 
 current_log = {}
+current_log_start = time.time() - THRESHOLDS["cooldown"] + 0.1
 
 
 # LOGGING INIT AND HELPERS
@@ -76,7 +78,7 @@ def init(flush=False, thresholds=None, logging="firebase"):
 
     if thresholds:
         global THRESHOLDS
-        THRESHOLDS = {**THRESHOLDS, **thresholds}  # combining and overwriting THRESHOLDS with thresholds param
+        THRESHOLDS = {**THRESHOLDS, **thresholds}
 
 
 def get_now(seconds):
@@ -95,6 +97,9 @@ def get_percent_diff(best_match):
 
 def update_current_logs(is_recognized, best_match):
     global current_log, num_recognized, num_unknown
+
+    if time.time() - current_log_start >= THRESHOLDS["refresh_rate"]:
+        flush_current()
 
     if is_recognized:
         now = time.time()
@@ -124,7 +129,7 @@ def log_person(student_name, times, firebase=True):
         CURSOR.execute(add)
         DATABASE.commit()
 
-    else: 
+    else:
         path = DATABASE.child("known")
         data = {
             "student_id": get_id(student_name),
@@ -136,6 +141,7 @@ def log_person(student_name, times, firebase=True):
             DATABASE.child("known").set(data)
         else:
             DATABASE.child("known").update(data)
+
 
     global last_logged
     last_logged = time.time()
@@ -171,10 +177,11 @@ def log_unknown(path_to_img, firebase=True):
 
 
 def flush_current(regular_activity=True):
-    global current_log, num_recognized, num_unknown
+    global current_log, num_recognized, num_unknown, current_log_start
 
     if regular_activity:
         current_log = {}
         num_recognized = 0
+        current_log_start = time.time()
     else:
         num_unknown = 0

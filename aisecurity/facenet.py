@@ -461,10 +461,10 @@ class FaceNet(object):
             if log.get_percent_diff(best_match) <= log.THRESHOLDS["percent_diff"]:
                 recognized_person = mode(log.current_log)
                 log.log_person(recognized_person, times=log.current_log[recognized_person], firebase=firebase)
-                cprint("Regular activity logged", color="green", attrs=["bold"])
+                cprint("Regular activity logged ({})".format(best_match), color="green", attrs=["bold"])
 
         if log.num_unknown >= log.THRESHOLDS["num_unknown"] and cooldown_ok(log.unk_last_logged):
-            path = CONFIG_HOME + "/database/unknown/{}.jpg".format(len(os.listdir(CONFIG_HOME + "/database/unknown")))
+            path = CONFIG_HOME + "/logging/unknown/{}.jpg".format(len(os.listdir(CONFIG_HOME + "/logging/unknown")))
             log.log_unknown(path, firebase=firebase)
 
             warnings.warn("recording unknown images in user directory is deprecated and will be changed later")
