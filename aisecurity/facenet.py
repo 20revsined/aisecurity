@@ -306,14 +306,14 @@ class FaceNet(object):
         # REAL-TIME FACIAL RECOGNITION
 
     def real_time_recognize(self, width=640, height=360, use_log=True, use_dynamic=False, use_picam=False,
-                            framerate=20, use_graphics=True, resize=None, use_lcd=False):
+                            framerate=20, use_graphics=True, resize=None, use_lcd=False, firebase=False):
         async def async_helper(recognize_func, *args, **kwargs):
             await recognize_func(*args, **kwargs)
 
         loop = asyncio.new_event_loop()
         task = loop.create_task(async_helper(self._real_time_recognize, width, height, use_log,
                                              use_dynamic=use_dynamic, use_graphics=use_graphics,
-                                             use_picam=use_picam, framerate=framerate, resize=resize, use_lcd=use_lcd))
+                                             use_picam=use_picam, framerate=framerate, resize=resize, use_lcd=use_lcd, firebase=firebase))
         loop.run_until_complete(task)
 
         # GRAPHICS
@@ -442,7 +442,7 @@ class FaceNet(object):
 
     # LOGGING
     @staticmethod
-    def log_activity(is_recognized, best_match, frame, log_unknown=True):
+    def log_activity(is_recognized, best_match, frame, log_unknown=True, firebase=False):
         cooldown_ok = lambda t: time.time() - t > log.THRESHOLDS["cooldown"]
         mode = lambda d: max(d.keys(), key=lambda key: d[key])
 
@@ -451,12 +451,12 @@ class FaceNet(object):
         if log.num_recognized >= log.THRESHOLDS["num_recognized"] and cooldown_ok(log.last_logged):
             if log.get_percent_diff(best_match) <= log.THRESHOLDS["percent_diff"]:
                 recognized_person = mode(log.current_log)
-                log.log_person(recognized_person, times=log.current_log[recognized_person])
+                log.log_person(recognized_person, times=log.current_log[recognized_person], firebase=firebase)
                 cprint("Regular activity logged", color="green", attrs=["bold"])
 
         if log_unknown and log.num_unknown >= log.THRESHOLDS["num_unknown"] and cooldown_ok(log.unk_last_logged):
             path = CONFIG_HOME + "/database/unknown/{}.jpg".format(len(os.listdir(CONFIG_HOME + "/database/unknown")))
-            log.log_unknown(path)
+            log.log_unknown(path, firebase=firebase)
 
             warnings.warn("recording unknown images in user directory is deprecated and will be changed later")
             cv2.imwrite(path, frame)
