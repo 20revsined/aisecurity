@@ -23,7 +23,7 @@ config = {
     "storageBucket": "aisecurity-1f693.appspot.com",
     #"messagingSenderId": "626961674461",
     #"appId": "1:626961674461:web:424708683547daae",
-    "serviceAccount": CONFIG_HOME+"/aisecurity/logging/aisecurity-1f693-5351d8b70c93.json"
+    "serviceAccount": CONFIG_HOME+"/aisecurity/logging/_aisecurity-1f693-5351d8b70c93.json"
 }
 
 firebase = pyrebase.initialize_app(config)
