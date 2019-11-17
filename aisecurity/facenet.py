@@ -13,7 +13,10 @@ import requests
 
 from adafruit_character_lcd.character_lcd_i2c import Character_LCD_I2C as character_lcd
 import busio
-import board
+try:
+    import board
+except NotImplementedError:
+    raise NotImplementedError("Current Device lacking board compatiblity")
 import digitalio
 import matplotlib.pyplot as plt
 from sklearn import neighbors
