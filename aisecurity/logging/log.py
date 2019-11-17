@@ -2,7 +2,7 @@
 
 "aisecurity.logging.log"
 
-MySQL logging handling.
+MySQL and Firebase logging handling.
 
 """
 
@@ -10,28 +10,16 @@ import time
 import warnings
 
 import mysql.connector
+import pyrebase
+from pyrebase import *
 
 from aisecurity.utils.paths import CONFIG_HOME, CONFIG
 
-import pyrebase
-
-config = {
-    "apiKey": "AIzaSyDgAZBLrQrAeVHo1uyPa7aO4MphxWcPUWw",
-    "authDomain": "aisecurity-1f693.firebaseapp.com",
-    "databaseURL": "https://aisecurity-1f693.firebaseio.com",
-    #"projectId": "n-d3a20",
-    "storageBucket": "aisecurity-1f693.appspot.com",
-    #"messagingSenderId": "626961674461",
-    #"appId": "1:626961674461:web:424708683547daae",
-    "serviceAccount": CONFIG_HOME + "/logging/_aisecurity-1f693-5351d8b70c93.json"
-}
-
-firebase = pyrebase.initialize_app(config)
-
-
-warnings.warn("logging with MySQL is deprecated and will be removed in later versions", DeprecationWarning)
 
 # SETUP
+DATABASE, CURSOR = None, None
+FIREBASE = None
+
 THRESHOLDS = {
     "num_recognized": 5,
     "num_unknown": 5,
@@ -48,30 +36,50 @@ unk_last_logged = time.time() - THRESHOLDS["cooldown"] + 0.1
 
 current_log = {}
 
-try:
-    database = mysql.connector.connect(
-        host="localhost",
-        user=CONFIG["mysql_user"],
-        passwd=CONFIG["mysql_password"],
-        database="LOG"
-    )
-    cursor = database.cursor()
-
-except (mysql.connector.errors.DatabaseError, mysql.connector.errors.InterfaceError):
-    warnings.warn("Database credentials missing or incorrect")
-
 
 # LOGGING INIT AND HELPERS
-def init(flush=False, thresholds=None):
-    cursor.execute("USE LOG;")
-    database.commit()
+def init(flush=False, thresholds=None, firebase=False):
+    if not firebase:
+        warnings.warn("logging with MySQL is deprecated and will be removed in later versions", DeprecationWarning)
 
-    if flush:
-        instructions = open(CONFIG_HOME + "/bin/drop.sql")
-        for cmd in instructions:
-            if not cmd.startswith(" ") and not cmd.startswith("*/") and not cmd.startswith("/*"):
-                cursor.execute(cmd)
-                database.commit()
+        try:
+            global DATABASE
+            database = mysql.connector.connect(
+                host="localhost",
+                user=CONFIG["mysql_user"],
+                passwd=CONFIG["mysql_password"],
+                database="LOG"
+            )
+            global CURSOR
+            CURSOR = database.cursor()
+
+        except (mysql.connector.errors.DatabaseError, mysql.connector.errors.InterfaceError):
+            warnings.warn("MySQ database credentials missing or incorrect")
+
+        CURSOR.execute("USE LOG;")
+        DATABASE.commit()
+
+        if flush:
+            instructions = open(CONFIG_HOME + "/bin/drop.sql")
+            for cmd in instructions:
+                if not cmd.startswith(" ") and not cmd.startswith("*/") and not cmd.startswith("/*"):
+                    CURSOR.execute(cmd)
+                    DATABASE.commit()
+
+    else:
+        firebase_config = {
+            "apiKey": "AIzaSyDgAZBLrQrAeVHo1uyPa7aO4MphxWcPUWw",
+            "authDomain": "aisecurity-1f693.firebaseapp.com",
+            "databaseURL": "https://aisecurity-1f693.firebaseio.com",
+            # "projectId": "n-d3a20",
+            "storageBucket": "aisecurity-1f693.appspot.com",
+            # "messagingSenderId": "626961674461",
+            # "appId": "1:626961674461:web:424708683547daae",
+            "serviceAccount": CONFIG_HOME + "/logging/_aisecurity-1f693-5351d8b70c93.json"
+        }
+
+        global FIREBASE
+        FIREBASE = pyrebase.initialize_app(firebase_config)
 
     if thresholds:
         global THRESHOLDS
@@ -118,8 +126,8 @@ def log_person(student_name, times, firebase=False):
     if not firebase:
         add = "INSERT INTO Activity (student_id, student_name, date, time) VALUES ({}, '{}', '{}', '{}');".format(
             get_id(student_name), student_name.replace("_", " ").title(), *get_now(sum(times) / len(times)))
-        cursor.execute(add)
-        database.commit()
+        CURSOR.execute(add)
+        DATABASE.commit()
     else: 
         path = db.child("known")
         time = get_now(sum(times)/len(times))
@@ -144,8 +152,8 @@ def log_unknown(path_to_img, firebase=False):
     if not firebase:
         add = "INSERT INTO Unknown (path_to_img, date, time) VALUES ('{}', '{}', '{}');".format(
             path_to_img, *get_now(time.time()))
-        cursor.execute(add)
-        database.commit()
+        CURSOR.execute(add)
+        DATABASE.commit()
     else:
         path = db.child("known")
         time = get_now(time.time())
