@@ -38,8 +38,8 @@ current_log = {}
 
 
 # LOGGING INIT AND HELPERS
-def init(flush=False, thresholds=None, firebase=False):
-    if not firebase:
+def init(flush=False, thresholds=None, logging="firebase"):
+    if logging == "mysql":
         warnings.warn("logging with MySQL is deprecated and will be removed in later versions", DeprecationWarning)
 
         try:
@@ -66,7 +66,7 @@ def init(flush=False, thresholds=None, firebase=False):
                     CURSOR.execute(cmd)
                     DATABASE.commit()
 
-    else:
+    elif logging == "firebase":
         firebase_config = {
             "apiKey": "AIzaSyDgAZBLrQrAeVHo1uyPa7aO4MphxWcPUWw",
             "authDomain": "aisecurity-1f693.firebaseapp.com",
@@ -75,7 +75,7 @@ def init(flush=False, thresholds=None, firebase=False):
             "storageBucket": "aisecurity-1f693.appspot.com",
             # "messagingSenderId": "626961674461",
             # "appId": "1:626961674461:web:424708683547daae",
-            "serviceAccount": CONFIG_HOME + "/logging/_aisecurity-1f693-5351d8b70c93.json"
+            "serviceAccount": CONFIG_HOME + "/logging/aisecurity-1f693-5351d8b70c93.json"
         }
 
         global FIREBASE
@@ -122,7 +122,7 @@ def update_current_logs(is_recognized, best_match):
 
 
 # LOGGING FUNCTIONS
-def log_person(student_name, times, firebase=False):
+def log_person(student_name, times, firebase=True):
     if not firebase:
         add = "INSERT INTO Activity (student_id, student_name, date, time) VALUES ({}, '{}', '{}', '{}');".format(
             get_id(student_name), student_name.replace("_", " ").title(), *get_now(sum(times) / len(times)))
@@ -148,7 +148,7 @@ def log_person(student_name, times, firebase=False):
     flush_current(regular_activity=True)
 
 
-def log_unknown(path_to_img, firebase=False):
+def log_unknown(path_to_img, firebase=True):
     if not firebase:
         add = "INSERT INTO Unknown (path_to_img, date, time) VALUES ('{}', '{}', '{}');".format(
             path_to_img, *get_now(time.time()))

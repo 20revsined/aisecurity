@@ -11,17 +11,19 @@ import asyncio
 import warnings
 import requests
 
-from adafruit_character_lcd.character_lcd_i2c import Character_LCD_I2C as character_lcd
-import busio
-import board
-import digitalio
+try:
+    from adafruit_character_lcd.character_lcd_i2c import Character_LCD_I2C as character_lcd
+    import busio
+    import board
+    import digitalio
+except NotImplementedError:
+    warnings.warn("LCD not supported")
 import matplotlib.pyplot as plt
 from sklearn import neighbors
 import tensorflow as tf
 from termcolor import cprint
 
 from aisecurity.logging import log
-from aisecurity.utils.camera import *
 from aisecurity.utils.dataflow import *
 from aisecurity.utils.paths import CONFIG_HOME, CONFIG
 from aisecurity.utils.preprocessing import *
@@ -207,7 +209,7 @@ class FaceNet(object):
         if use_dynamic:
             db_types.append("dynamic")
         if logging:
-            log.init(flush=True)
+            log.init(flush=True, logging=logging)
         if use_lcd:
             i2c = busio.I2C(board.SCL, board.SDA)
             try:
@@ -305,12 +307,12 @@ class FaceNet(object):
 
 
     # REAL-TIME FACIAL RECOGNITION
-    def real_time_recognize(self, width=640, height=360, logging="mysql", use_dynamic=False, use_picam=False,
+    def real_time_recognize(self, width=640, height=360, logging="firebase", use_dynamic=False, use_picam=False,
                             framerate=20, use_graphics=True, resize=None, use_lcd=False):
         assert width > 0 and height > 0, "width and height must be positive integers"
-        assert logging is "mysql" or logging is "firebase", "only mysql and firebase logging supported"
+        assert logging == "mysql" or logging == "firebase", "only mysql and firebase logging supported"
         assert 0 < framerate < 150, "framerate must be between 0 and 150"
-        assert 0. < resize < 1., "resize must be between 0 and 1"
+        assert resize is None or 0. < resize < 1., "resize must be between 0 and 1"
 
         async def async_helper(recognize_func, *args, **kwargs):
             await recognize_func(*args, **kwargs)

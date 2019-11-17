@@ -7,14 +7,14 @@ Demonstration of facial recognition system.
 """
 
 
-def demo(model="ms_celeb_1m", path=None, logging="mysql", use_dynamic=True, use_picam=False, use_graphics=True,
+def demo(model="ms_celeb_1m", path=None, logging="firebase", use_dynamic=True, use_picam=False, use_graphics=True,
          resize=None, verbose=False, use_lcd=False):
 
     # default arg values (for Pycharm, where args.* default to None)
     if model is None:
         model = "ms_celeb_1m"
     if logging is None:
-        logging = "mysql"
+        logging = "firebase"
     if use_dynamic is None:
         use_dynamic = True
     if use_picam is None:

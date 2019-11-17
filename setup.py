@@ -10,7 +10,8 @@ setup(
     author_email="22parkr@millburn.org",
     license=None,
     python_requires=">=3.5.0",
-    install_requires=["matplotlib", "Pyrebase", "adafruit-circuitpython-charlcd", "scikit-learn", "mtcnn", "pycryptodome", "pymysql", "mysql-connector-python"],
+    install_requires=["matplotlib", "Pyrebase", "adafruit-circuitpython-charlcd", "scikit-learn", "mtcnn",
+                      "pycryptodome", "pymysql", "mysql-connector-python"],
     scripts=["bin/make_config.sh", "bin/make_keys.sh"],
     packages=find_packages(),
     zip_safe=False
