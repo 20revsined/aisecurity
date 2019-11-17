@@ -16,7 +16,7 @@ import busio
 try:
     import board
 except NotImplementedError:
-    raise NotImplementedError("Current Device lacking board compatiblity")
+    pass
 import digitalio
 import matplotlib.pyplot as plt
 from sklearn import neighbors
