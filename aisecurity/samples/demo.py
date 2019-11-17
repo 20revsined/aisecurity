@@ -58,7 +58,6 @@ def demo(model="ms_celeb_1m", path=None, logging="firebase", use_dynamic=True, u
     facenet.set_data(retrieve_embeds(DATABASE, encrypted="names"))
 
     input("\nPress ENTER to continue:")
-
     facenet.real_time_recognize(logging=logging, use_dynamic=use_dynamic, use_picam=use_picam,
                                 use_graphics=use_graphics, resize=resize, use_lcd=use_lcd)
 

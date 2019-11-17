@@ -308,7 +308,7 @@ class FaceNet(object):
 
     # REAL-TIME FACIAL RECOGNITION
     def real_time_recognize(self, width=640, height=360, logging="firebase", use_dynamic=False, use_picam=False,
-                            framerate=20, use_graphics=True, resize=None, use_lcd=False):
+                            use_graphics=True, framerate=20, resize=None, use_lcd=False):
         assert width > 0 and height > 0, "width and height must be positive integers"
         assert logging == "mysql" or logging == "firebase", "only mysql and firebase logging supported"
         assert 0 < framerate < 150, "framerate must be between 0 and 150"
@@ -318,8 +318,8 @@ class FaceNet(object):
             await recognize_func(*args, **kwargs)
 
         loop = asyncio.new_event_loop()
-        task = loop.create_task(async_helper(self._real_time_recognize, width, height, logging,
-                                             use_dynamic, use_graphics, use_picam, framerate, resize, use_lcd))
+        task = loop.create_task(async_helper(self._real_time_recognize, width, height, logging, use_dynamic,
+                                             use_picam, use_graphics, framerate, resize, use_lcd))
         loop.run_until_complete(task)
 
 
@@ -450,7 +450,7 @@ class FaceNet(object):
     # LOGGING
     @staticmethod
     def log_activity(is_recognized, best_match, frame, logging_type):
-        firebase = True if logging_type is "firebase" else False
+        firebase = True if logging_type == "firebase" else False
 
         cooldown_ok = lambda t: time.time() - t > log.THRESHOLDS["cooldown"]
         mode = lambda d: max(d.keys(), key=lambda key: d[key])

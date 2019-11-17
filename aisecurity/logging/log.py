@@ -5,7 +5,7 @@
 MySQL and Firebase logging handling.
 
 """
-
+import json
 import time
 import warnings
 
@@ -17,7 +17,8 @@ from aisecurity.utils.paths import CONFIG_HOME, CONFIG
 
 
 # SETUP
-DATABASE, CURSOR = None, None
+DATABASE = None
+CURSOR = None
 FIREBASE = None
 
 THRESHOLDS = {
@@ -39,22 +40,22 @@ current_log = {}
 
 # LOGGING INIT AND HELPERS
 def init(flush=False, thresholds=None, logging="firebase"):
+    global DATABASE, CURSOR, FIREBASE
+
     if logging == "mysql":
         warnings.warn("logging with MySQL is deprecated and will be removed in later versions", DeprecationWarning)
 
         try:
-            global DATABASE
-            database = mysql.connector.connect(
+            DATABASE = mysql.connector.connect(
                 host="localhost",
                 user=CONFIG["mysql_user"],
                 passwd=CONFIG["mysql_password"],
                 database="LOG"
             )
-            global CURSOR
-            CURSOR = database.cursor()
+            CURSOR = DATABASE.cursor()
 
         except (mysql.connector.errors.DatabaseError, mysql.connector.errors.InterfaceError):
-            warnings.warn("MySQ database credentials missing or incorrect")
+            warnings.warn("MySQL database credentials missing or incorrect")
 
         CURSOR.execute("USE LOG;")
         DATABASE.commit()
@@ -67,19 +68,11 @@ def init(flush=False, thresholds=None, logging="firebase"):
                     DATABASE.commit()
 
     elif logging == "firebase":
-        firebase_config = {
-            "apiKey": "AIzaSyDgAZBLrQrAeVHo1uyPa7aO4MphxWcPUWw",
-            "authDomain": "aisecurity-1f693.firebaseapp.com",
-            "databaseURL": "https://aisecurity-1f693.firebaseio.com",
-            # "projectId": "n-d3a20",
-            "storageBucket": "aisecurity-1f693.appspot.com",
-            # "messagingSenderId": "626961674461",
-            # "appId": "1:626961674461:web:424708683547daae",
-            "serviceAccount": CONFIG_HOME + "/logging/aisecurity-1f693-5351d8b70c93.json"
-        }
-
-        global FIREBASE
-        FIREBASE = pyrebase.initialize_app(firebase_config)
+        try:
+            FIREBASE = pyrebase.initialize_app(json.load(open(CONFIG_HOME + "/logging/firebase.json")))
+            DATABASE = FIREBASE.database()
+        except FileNotFoundError:
+            raise FileNotFoundError(CONFIG_HOME + "/logging/firebase.json and a key file are needed to use firebase")
 
     if thresholds:
         global THRESHOLDS
@@ -123,24 +116,26 @@ def update_current_logs(is_recognized, best_match):
 
 # LOGGING FUNCTIONS
 def log_person(student_name, times, firebase=True):
+    now = get_now(sum(times) / len(times))
+
     if not firebase:
         add = "INSERT INTO Activity (student_id, student_name, date, time) VALUES ({}, '{}', '{}', '{}');".format(
-            get_id(student_name), student_name.replace("_", " ").title(), *get_now(sum(times) / len(times)))
+            get_id(student_name), student_name.replace("_", " ").title(), *now)
         CURSOR.execute(add)
         DATABASE.commit()
+
     else: 
-        path = db.child("known")
-        time = get_now(sum(times)/len(times))
+        path = DATABASE.child("known")
         data = {
             "student_id": get_id(student_name),
             "student_name": student_name.replace("_", " ").title(),
-            "date": time[0],
-            "time": time[1]
+            "date": now[0],
+            "time": now[1]
         }
-        if path.get().val()==None:
-            db.child("known").set(data)
+        if path.get().val() is None:
+            DATABASE.child("known").set(data)
         else:
-            db.child("known").update(data)
+            DATABASE.child("known").update(data)
 
     global last_logged
     last_logged = time.time()
@@ -149,23 +144,25 @@ def log_person(student_name, times, firebase=True):
 
 
 def log_unknown(path_to_img, firebase=True):
+    now = get_now(time.time())
+
     if not firebase:
         add = "INSERT INTO Unknown (path_to_img, date, time) VALUES ('{}', '{}', '{}');".format(
-            path_to_img, *get_now(time.time()))
+            path_to_img, *now)
         CURSOR.execute(add)
         DATABASE.commit()
+
     else:
-        path = db.child("known")
-        time = get_now(time.time())
+        path = DATABASE.child("known")
         data = {
             "path_to_img": path_to_img,
-            "date": time[0],
-            "time": time[1]
+            "date": now[0],
+            "time": now[1]
         }
-        if path.get().val()==None:
-            db.child("unknown").set(data)
+        if path.get().val() is None:
+            DATABASE.child("unknown").set(data)
         else:
-            db.child("unknown").update(data)
+            DATABASE.child("unknown").update(data)
 
     global unk_last_logged
     unk_last_logged = time.time()
@@ -175,6 +172,7 @@ def log_unknown(path_to_img, firebase=True):
 
 def flush_current(regular_activity=True):
     global current_log, num_recognized, num_unknown
+
     if regular_activity:
         current_log = {}
         num_recognized = 0
