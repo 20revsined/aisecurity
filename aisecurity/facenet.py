@@ -13,10 +13,7 @@ import requests
 
 from adafruit_character_lcd.character_lcd_i2c import Character_LCD_I2C as character_lcd
 import busio
-try:
-    import board
-except NotImplementedError:
-    pass
+import board
 import digitalio
 import matplotlib.pyplot as plt
 from sklearn import neighbors
@@ -202,14 +199,14 @@ class FaceNet(object):
 
         return is_recognized, best_match, l2_dist
 
-        # REAL-TIME FACIAL RECOGNITION HELPER
 
-    async def _real_time_recognize(self, width, height, use_log, use_dynamic, use_picam, use_graphics, framerate,
+    # REAL-TIME FACIAL RECOGNITION HELPER
+    async def _real_time_recognize(self, width, height, logging, use_dynamic, use_picam, use_graphics, framerate,
                                    resize, use_lcd):
         db_types = ["static"]
         if use_dynamic:
             db_types.append("dynamic")
-        if use_log:
+        if logging:
             log.init(flush=True)
         if use_lcd:
             i2c = busio.I2C(board.SCL, board.SDA)
@@ -281,8 +278,8 @@ class FaceNet(object):
                         self.dynamic_update(embedding, l2_dists)
 
                     # log activity
-                    if use_log:
-                        self.log_activity(is_recognized, best_match, original_frame, log_unknown=True)
+                    if logging:
+                        self.log_activity(is_recognized, best_match, original_frame, logging)
 
                     l2_dists.append(l2_dist)
 
@@ -306,21 +303,25 @@ class FaceNet(object):
         cap.release()
         cv2.destroyAllWindows()
 
-        # REAL-TIME FACIAL RECOGNITION
 
-    def real_time_recognize(self, width=640, height=360, use_log=True, use_dynamic=False, use_picam=False,
-                            framerate=20, use_graphics=True, resize=None, use_lcd=False, firebase=False):
+    # REAL-TIME FACIAL RECOGNITION
+    def real_time_recognize(self, width=640, height=360, logging="mysql", use_dynamic=False, use_picam=False,
+                            framerate=20, use_graphics=True, resize=None, use_lcd=False):
+        assert width > 0 and height > 0, "width and height must be positive integers"
+        assert logging is "mysql" or logging is "firebase", "only mysql and firebase logging supported"
+        assert 0 < framerate < 150, "framerate must be between 0 and 150"
+        assert 0. < resize < 1., "resize must be between 0 and 1"
+
         async def async_helper(recognize_func, *args, **kwargs):
             await recognize_func(*args, **kwargs)
 
         loop = asyncio.new_event_loop()
-        task = loop.create_task(async_helper(self._real_time_recognize, width, height, use_log,
-                                             use_dynamic=use_dynamic, use_graphics=use_graphics,
-                                             use_picam=use_picam, framerate=framerate, resize=resize, use_lcd=use_lcd, firebase=firebase))
+        task = loop.create_task(async_helper(self._real_time_recognize, width, height, logging,
+                                             use_dynamic, use_graphics, use_picam, framerate, resize, use_lcd))
         loop.run_until_complete(task)
 
-        # GRAPHICS
 
+    # GRAPHICS
     @staticmethod
     def get_video_cap(width, height, picamera, framerate):
         def _gstreamer_pipeline(capture_width=1280, capture_height=720, display_width=640, display_height=360,
@@ -347,7 +348,6 @@ class FaceNet(object):
         line_thickness = round(1e-6 * width * height + 1.5)
         radius = round((1e-6 * width * height + 1.5) / 2.)
         font_size = 4.5e-7 * width * height + 0.5
-
         # works for 6.25e4 pixel video cature to 1e6 pixel video capture
 
         def get_color(is_recognized, best_match):
@@ -413,6 +413,7 @@ class FaceNet(object):
         if lcd:
             add_lcd_display(lcd)
 
+
     # DISPLAY
     def show_embeds(self, encrypted=False, single=False):
         assert self.data, "data must be provided to show embeddings"
@@ -443,9 +444,12 @@ class FaceNet(object):
             if single and person == list(data.keys())[0]:
                 break
 
+
     # LOGGING
     @staticmethod
-    def log_activity(is_recognized, best_match, frame, log_unknown=True, firebase=False):
+    def log_activity(is_recognized, best_match, frame, logging_type):
+        firebase = True if logging_type is "firebase" else False
+
         cooldown_ok = lambda t: time.time() - t > log.THRESHOLDS["cooldown"]
         mode = lambda d: max(d.keys(), key=lambda key: d[key])
 
@@ -457,13 +461,14 @@ class FaceNet(object):
                 log.log_person(recognized_person, times=log.current_log[recognized_person], firebase=firebase)
                 cprint("Regular activity logged", color="green", attrs=["bold"])
 
-        if log_unknown and log.num_unknown >= log.THRESHOLDS["num_unknown"] and cooldown_ok(log.unk_last_logged):
+        if log.num_unknown >= log.THRESHOLDS["num_unknown"] and cooldown_ok(log.unk_last_logged):
             path = CONFIG_HOME + "/database/unknown/{}.jpg".format(len(os.listdir(CONFIG_HOME + "/database/unknown")))
             log.log_unknown(path, firebase=firebase)
 
             warnings.warn("recording unknown images in user directory is deprecated and will be changed later")
             cv2.imwrite(path, frame)
             cprint("Unknown activity logged", color="red", attrs=["bold"])
+
 
     # DYNAMIC DATABASE
     def dynamic_update(self, embedding, l2_dists):
