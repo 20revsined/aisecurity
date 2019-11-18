@@ -35,8 +35,8 @@ class FaceNet(object):
 
     # HYPERPARAMETERS
     HYPERPARAMS = {
-        "alpha": 0.7,
-        "mtcnn_alpha": 0.85
+        "alpha": 0.75,
+        "mtcnn_alpha": 0.9
     }
 
 
@@ -235,7 +235,7 @@ class FaceNet(object):
         while True:
             _, frame = cap.read()
             if use_picam:
-                frame = cv2.addWeighted(frame, 1.5, frame, 0, -100.)  # picamera needs extra contrast
+                frame = cv2.addWeighted(frame, 2., frame, 0, -125.)  # picamera needs extra contrast
             original_frame = frame.copy()
             if resize:
                 frame = cv2.resize(frame, (0, 0), fx=resize, fy=resize)
