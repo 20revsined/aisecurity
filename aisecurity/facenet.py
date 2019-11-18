@@ -296,14 +296,13 @@ class FaceNet(object):
                     l2_dists = []
                 print("No face detected")
 
-            cv2.imshow("AI Security v1.0a", original_frame)
+            if use_graphics:
+                cv2.imshow("AI Security v1.0a", original_frame)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
             frames += 1
-
-            await asyncio.sleep(1e-6)
 
         cap.release()
         cv2.destroyAllWindows()
