@@ -138,17 +138,17 @@ class FaceNet(object):
         return graph_def
 
     def get_embeds(self, data, *args, **kwargs):
-        embeds = []
-        for n in args:
-            if isinstance(n, str):
-                try:
-                    n = data[n]
-                except KeyError:
-                    n = self.predict([n], margin=CONSTANTS["margin"], **kwargs)
-            elif not (n.ndim <= 2 and (1 in n.shape or n.ndim == 1)):  # n must be a vector
-                n = self.predict([n], margin=CONSTANTS["margin"], **kwargs)
-            embeds.append(n)
-        return embeds if len(embeds) > 1 else embeds[0]
+        def _embed_generator(predict, data, *args, **kwargs):
+            for n in args:
+                if isinstance(n, str):
+                    try:
+                        yield data[n]
+                    except KeyError:
+                        yield predict([n], margin=CONSTANTS["margin"], **kwargs)
+                elif not (n.ndim <= 2 and (1 in n.shape or n.ndim == 1)):  # n must be a vector
+                    yield predict([n], margin=CONSTANTS["margin"], **kwargs)
+
+        return list(_embed_generator(self.predict, data, *args, **kwargs))
 
     def predict(self, paths_or_imgs, margin=None, faces=None):
         if margin is None:
@@ -267,12 +267,12 @@ class FaceNet(object):
                     else:
                         raise error
                     continue
-                    
+
                 lcd = lcd if use_lcd else None
 
                 # add graphics
                 if use_graphics:
-                    self.add_graphics(original_frame, overlay, person, width, height, is_recognized, best_match, 
+                    self.add_graphics(original_frame, overlay, person, width, height, is_recognized, best_match,
                                       resize, lcd)
 
                 if frames > 5:  # wait 5 frames before logging starts
@@ -453,7 +453,7 @@ class FaceNet(object):
                 recognized_person = mode(log.current_log)
                 log.log_person(recognized_person, times=log.current_log[recognized_person], firebase=firebase)
                 cprint("Regular activity logged ({})".format(best_match), color="green", attrs=["bold"])
-                
+
                 if lcd:
                     FaceNet.add_lcd_display(lcd, best_match)
 
@@ -464,7 +464,7 @@ class FaceNet(object):
             warnings.warn("recording unknown images in user directory is deprecated andt will be changed later")
             cv2.imwrite(path, frame)
             cprint("Unknown activity logged", color="red", attrs=["bold"])
-            
+
             if lcd:
                 FaceNet.add_lcd_display(lcd, best_match)
 
@@ -491,6 +491,6 @@ class FaceNet(object):
                 self.__dynamic_db["visitor_{}".format(len(self.__dynamic_db) + 1)] = embedding.flatten()
                 self._train_knn(knn_types=["dynamic"])
                 log.flush_current()
-            
+
                 if lcd:
                     self.add_lcd_display(lcd, best_match)
