@@ -234,6 +234,8 @@ class FaceNet(object):
 
         while True:
             _, frame = cap.read()
+            if use_picam:
+                frame = cv2.addWeighted(frame, 1.5, frame, 0, -100.)  # picamera needs extra contrast
             original_frame = frame.copy()
             if resize:
                 frame = cv2.resize(frame, (0, 0), fx=resize, fy=resize)
