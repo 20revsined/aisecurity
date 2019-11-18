@@ -217,7 +217,7 @@ class FaceNet(object):
             except RuntimeError:
                 raise RuntimeError("Wire configuration incorrect")
             lcd = character_lcd(i2c, 16, 2, backlight_inverted=False)
-            lcd.message("Loading...")
+            lcd.message = "Loading..."
 
         cap = self.get_video_cap(width, height, picamera=use_picam, framerate=framerate, flip=flip)
 
