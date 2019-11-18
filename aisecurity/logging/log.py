@@ -42,6 +42,15 @@ current_log_start = time.time() - THRESHOLDS["cooldown"] + 0.1
 
 
 # LOGGING INIT AND HELPERS
+def get_id_firebase(child):
+    childElements = db.child(child).get()
+    if not childElements: 
+        ID = 0
+    else:
+        childElements = childElements.val()
+        ID = len(childElements.keys())
+    return ID
+
 def init(flush=False, thresholds=None, logging="firebase"):
     global DATABASE, CURSOR, FIREBASE
 
@@ -137,10 +146,8 @@ def log_person(student_name, times, firebase=True):
             "date": now[0],
             "time": now[1]
         }
-        if path.get().val() is None:
-            DATABASE.child("known").set(data)
-        else:
-            DATABASE.child("known").update(data)
+        ID = get_id_firebase("known")
+        DATABASE.child("known").child(ID).set(data)
 
 
     global last_logged
@@ -159,16 +166,14 @@ def log_unknown(path_to_img, firebase=True):
         DATABASE.commit()
 
     else:
-        path = DATABASE.child("known")
+        path = DATABASE.child("unknown")
         data = {
             "path_to_img": path_to_img,
             "date": now[0],
             "time": now[1]
         }
-        if path.get().val() is None:
-            DATABASE.child("unknown").set(data)
-        else:
-            DATABASE.child("unknown").update(data)
+        ID = get_id_firebase("unknown")
+        DATABASE.child("unknown").child(ID).set(data)
 
     global unk_last_logged
     unk_last_logged = time.time()
