@@ -148,9 +148,9 @@ class FaceNet(object):
                 elif not (n.ndim <= 2 and (1 in n.shape or n.ndim == 1)):  # n must be a vector
                     yield predict([n], margin=CONSTANTS["margin"], **kwargs)
 
-        result = _embed_generator(self.predict, data, *args, **kwargs)
+        result = list(_embed_generator(self.predict, data, *args, **kwargs))
         return result if len(result) > 1 else result[0]
-    
+
     def predict(self, paths_or_imgs, margin=None, faces=None):
         if margin is None:
             margin = CONSTANTS["margin"]
