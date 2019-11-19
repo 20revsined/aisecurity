@@ -203,294 +203,271 @@ class FaceNet(object):
         return is_recognized, best_match, l2_dist
 
 
-    # REAL-TIME FACIAL RECOGNITION HELPER
-    async def _real_time_recognize(self, width, height, logging, use_dynamic, use_picam, use_graphics, framerate,
-                                   resize, use_lcd, flip):
-        db_types = ["static"]
-        if use_dynamic:
-            db_types.append("dynamic")
-        if logging:
-            log.init(flush=True, logging=logging)
-        if use_lcd:
-            i2c = busio.I2C(board.SCL, board.SDA)
-            try:
-                i2c.scan()
-            except RuntimeError:
-                raise RuntimeError("Wire configuration incorrect")
-            lcd = character_lcd(i2c, 16, 2, backlight_inverted=False)
-            lcd.message = "Loading..."
 
-        cap = self.get_video_cap(width, height, picamera=use_picam, framerate=framerate, flip=flip)
-
-        if resize:
-            width, height = width * resize, height * resize
-
-        mtcnn = MTCNN(min_face_size=0.5 * (width + height) / 3)  # face needs to fill at least 1/3 of the frame
-
-        missed_frames = 0
-        l2_dists = []
-
-        frames = 0
-
-        while True:
-            _, frame = cap.read()
-            if use_picam:
-                frame = cv2.addWeighted(frame, 2., frame, 0, -125.)  # picamera needs extra contrast
-            original_frame = frame.copy()
-            if resize:
-                frame = cv2.resize(frame, (0, 0), fx=resize, fy=resize)
-
-            # using MTCNN to detect faces
-            result = mtcnn.detect_faces(frame)
-
-            if result:
-                overlay = original_frame.copy()
-
-                person = max(result, key=lambda person: person["confidence"])
-                face = person["box"]
-
-                if person["confidence"] < self.HYPERPARAMS["mtcnn_alpha"]:
-                    print("Face poorly detected")
-                    continue
-
-                # facial recognition
+        # REAL-TIME FACIAL RECOGNITION HELPER
+        async def _real_time_recognize(self, width, height, logging, use_dynamic, use_picam, use_graphics, framerate,
+                                       resize, use_lcd, flip):
+            db_types = ["static"]
+            if use_dynamic:
+                db_types.append("dynamic")
+            if logging:
+                log.init(flush=True, logging=logging)
+            if use_lcd:
+                i2c = busio.I2C(board.SCL, board.SDA)
                 try:
-                    embedding, is_recognized, best_match, l2_dist = self._recognize(frame, face, db_types)
-                    print(
-                        "L2 distance: {} ({}){}".format(l2_dist, best_match, " !" if not is_recognized else ""))
-                except (ValueError, cv2.error) as error:  # error-handling using names is unstable-- change later
-                    if "query data dimension" in str(error):
-                        raise ValueError("Current model incompatible with database")
-                    elif "empty" in str(error):
-                        print("Image refresh rate too high")
-                    elif "opencv" in str(error):
-                        print("Failed to capture frame")
-                    else:
-                        raise error
-                    continue
+                    i2c.scan()
+                except RuntimeError:
+                    raise RuntimeError("Wire configuration incorrect")
+                lcd = character_lcd(i2c, 16, 2, backlight_inverted=False)
 
-                lcd = lcd if use_lcd else None
+            cap = self.get_video_cap(width, height, picamera=use_picam, framerate=framerate, flip=flip)
 
-                # add graphics
-                if use_graphics:
-                    self.add_graphics(original_frame, overlay, person, width, height, is_recognized, best_match,
-                                      resize, lcd)
+            if resize:
+                width, height = width * resize, height * resize
 
-                if frames > 5:  # wait 5 frames before logging starts
+            mtcnn = MTCNN(min_face_size=0.5 * (width + height) / 3)  # face needs to fill at least 1/3 of the frame
 
-                    # update dynamic database
-                    if use_dynamic:
-                        self.dynamic_update(embedding, l2_dists, lcd, best_match)
+            missed_frames = 0
 
-                    # log activity
-                    if logging:
-                        self.log_activity(is_recognized, best_match, original_frame, logging, lcd)
+            frames = 0
 
-                    l2_dists.append(l2_dist)
+            while True:
+                _, frame = cap.read()
+                if use_picam:
+                    frame = cv2.addWeighted(frame, 2., frame, 0, -125.)  # picamera needs extra contrast
+                original_frame = frame.copy()
+                if resize:
+                    frame = cv2.resize(frame, (0, 0), fx=resize, fy=resize)
 
-            else:
-                missed_frames += 1
-                if missed_frames > log.THRESHOLDS["missed_frames"]:
-                    missed_frames = 0
-                    log.flush_current()
-                    l2_dists = []
-                print("No face detected")
+                # using MTCNN to detect faces
+                result = mtcnn.detect_faces(frame)
 
-            if use_graphics:
+                if result:
+                    overlay = original_frame.copy()
+
+                    person = max(result, key=lambda person: person["confidence"])
+                    face = person["box"]
+
+                    if person["confidence"] < self.HYPERPARAMS["mtcnn_alpha"]:
+                        print("Face poorly detected")
+                        continue
+
+                    # facial recognition
+                    try:
+                        embedding, is_recognized, best_match, l2_dist = self._recognize(frame, face, db_types)
+                        print(
+                            "L2 distance: {} ({}){}".format(l2_dist, best_match, " !" if not is_recognized else ""))
+                    except (ValueError, cv2.error) as error:  # error-handling using names is unstable-- change later
+                        if "query data dimension" in str(error):
+                            raise ValueError("Current model incompatible with database")
+                        elif "empty" in str(error):
+                            print("Image refresh rate too high")
+                        elif "opencv" in str(error):
+                            print("Failed to capture frame")
+                        else:
+                            raise error
+                        continue
+
+                    lcd = lcd if use_lcd else None
+
+                    # add graphics
+                    if use_graphics:
+                        self.add_graphics(original_frame, overlay, person, width, height, is_recognized, best_match,
+                                          resize, lcd)
+
+                    if frames > 5 and logging:
+                        self.log_activity(is_recognized, best_match, original_frame, logging, lcd, use_dynamic)
+
+                        log.l2_dists.append(l2_dist)
+
+                else:
+                    missed_frames += 1
+                    if missed_frames > log.THRESHOLDS["missed_frames"]:
+                        missed_frames = 0
+                        log.flush_current(mode=["known", "unknown"])
+                    print("No face detected")
+
                 cv2.imshow("AI Security v1.0a", original_frame)
 
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    break
 
-            frames += 1
+                frames += 1
 
-        cap.release()
-        cv2.destroyAllWindows()
+                await asyncio.sleep(1e-6)
+
+            cap.release()
+            cv2.destroyAllWindows()
+
+        # REAL-TIME FACIAL RECOGNITION
+        def real_time_recognize(self, width=640, height=360, logging="firebase", use_dynamic=False, use_picam=False,
+                                use_graphics=True, framerate=20, resize=None, use_lcd=False, flip=0):
+            assert width > 0 and height > 0, "width and height must be positive integers"
+            assert logging == "mysql" or logging == "firebase", "only mysql and firebase logging supported"
+            assert 0 < framerate < 150, "framerate must be between 0 and 150"
+            assert resize is None or 0. < resize < 1., "resize must be between 0 and 1"
+
+            async def async_helper(recognize_func, *args, **kwargs):
+                await recognize_func(*args, **kwargs)
+
+            loop = asyncio.new_event_loop()
+            task = loop.create_task(async_helper(self._real_time_recognize, width, height, logging, use_dynamic,
+                                                 use_picam, use_graphics, framerate, resize, use_lcd, flip))
+            loop.run_until_complete(task)
 
 
-    # REAL-TIME FACIAL RECOGNITION
-    def real_time_recognize(self, width=640, height=360, logging="firebase", use_dynamic=False, use_picam=False,
-                            use_graphics=True, framerate=20, resize=None, use_lcd=False, flip=0):
-        assert width > 0 and height > 0, "width and height must be positive integers"
-        assert logging == "mysql" or logging == "firebase", "only mysql and firebase logging supported"
-        assert 0 < framerate < 150, "framerate must be between 0 and 150"
-        assert resize is None or 0. < resize < 1., "resize must be between 0 and 1"
-
-        async def async_helper(recognize_func, *args, **kwargs):
-            await recognize_func(*args, **kwargs)
-
-        loop = asyncio.new_event_loop()
-        task = loop.create_task(async_helper(self._real_time_recognize, width, height, logging, use_dynamic,
-                                             use_picam, use_graphics, framerate, resize, use_lcd, flip))
-        loop.run_until_complete(task)
-
-
-    # GRAPHICS
-    @staticmethod
-    def get_video_cap(width, height, picamera, framerate, flip):
-        def _gstreamer_pipeline(capture_width=1280, capture_height=720, display_width=640, display_height=360,
-                                framerate=20, flip=0):
-            return (
+        # GRAPHICS
+        @staticmethod
+        def get_video_cap(width, height, picamera, framerate, flip):
+            def _gstreamer_pipeline(capture_width=1280, capture_height=720, display_width=640, display_height=360,
+                                    framerate=20, flip=0):
+                return (
                     "nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, format=(string)NV12,"
                     " framerate=(fraction)%d/1 ! nvvidconv flip-method=%d ! video/x-raw, width=(int)%d, height=(int)%d,"
                     " format=(string)BGRx ! videoconvert ! video/x-raw, format=(string)BGR ! appsink"
                     % (capture_width, capture_height, framerate, flip, display_width, display_height)
-            )
+                )
 
-        if picamera:
-            return cv2.VideoCapture(
-                _gstreamer_pipeline(display_width=width, display_height=height, framerate=framerate, flip=flip),
-                cv2.CAP_GSTREAMER)
-        else:
-            cap = cv2.VideoCapture(0)
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-            return cap
-
-    @staticmethod
-    def add_graphics(frame, overlay, person, width, height, is_recognized, best_match, resize, lcd):
-        line_thickness = round(1e-6 * width * height + 1.5)
-        radius = round((1e-6 * width * height + 1.5) / 2.)
-        font_size = 4.5e-7 * width * height + 0.5
-
-        # works for 6.25e4 pixel video cature to 1e6 pixel video capture
-
-        def get_color(is_recognized, best_match):
-            if not is_recognized:
-                return 0, 0, 255  # red
-            elif "visitor" in best_match:
-                return 218, 112, 214  # purple (actually more of an "orchid")
+            if picamera:
+                return cv2.VideoCapture(
+                    _gstreamer_pipeline(display_width=width, display_height=height, framerate=framerate, flip=flip),
+                    cv2.CAP_GSTREAMER)
             else:
-                return 0, 255, 0  # green
+                cap = cv2.VideoCapture(0)
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+                return cap
 
-        def add_box_and_label(frame, origin, corner, color, line_thickness, best_match, font_size, thickness):
-            cv2.rectangle(frame, origin, corner, color, line_thickness)
-            # label box
-            cv2.rectangle(frame, (origin[0], corner[1] - 35), corner, color, cv2.FILLED)
-            cv2.putText(frame, best_match.replace("_", " ").title(), (origin[0] + 6, corner[1] - 6),
-                        cv2.FONT_HERSHEY_DUPLEX, font_size, (255, 255, 255), thickness)  # white text
+        @staticmethod
+        def add_graphics(frame, overlay, person, width, height, is_recognized, best_match, resize, lcd):
+            line_thickness = round(1e-6 * width * height + 1.5)
+            radius = round((1e-6 * width * height + 1.5) / 2.)
+            font_size = 4.5e-7 * width * height + 0.5
+            # works for 6.25e4 pixel video cature to 1e6 pixel video capture
 
-        def add_features(overlay, features, radius, color, line_thickness):
-            cv2.circle(overlay, (features["left_eye"]), radius, color, line_thickness)
-            cv2.circle(overlay, (features["right_eye"]), radius, color, line_thickness)
-            cv2.circle(overlay, (features["nose"]), radius, color, line_thickness)
-            cv2.circle(overlay, (features["mouth_left"]), radius, color, line_thickness)
-            cv2.circle(overlay, (features["mouth_right"]), radius, color, line_thickness)
+            def get_color(is_recognized, best_match):
+                if not is_recognized:
+                    return 0, 0, 255  # red
+                elif "visitor" in best_match:
+                    return 218, 112, 214  # purple (actually more of an "orchid")
+                else:
+                    return 0, 255, 0  # green
 
-            cv2.line(overlay, features["left_eye"], features["nose"], color, radius)
-            cv2.line(overlay, features["right_eye"], features["nose"], color, radius)
-            cv2.line(overlay, features["mouth_left"], features["nose"], color, radius)
-            cv2.line(overlay, features["mouth_right"], features["nose"], color, radius)
+            def add_box_and_label(frame, origin, corner, color, line_thickness, best_match, font_size, thickness):
+                cv2.rectangle(frame, origin, corner, color, line_thickness)
+                # label box
+                cv2.rectangle(frame, (origin[0], corner[1] - 35), corner, color, cv2.FILLED)
+                cv2.putText(frame, best_match.replace("_", " ").title(), (origin[0] + 6, corner[1] - 6),
+                            cv2.FONT_HERSHEY_DUPLEX, font_size, (255, 255, 255), thickness)  # white text
 
-        features = person["keypoints"]
-        x, y, height, width = person["box"]
+            def add_features(overlay, features, radius, color, line_thickness):
+                cv2.circle(overlay, (features["left_eye"]), radius, color, line_thickness)
+                cv2.circle(overlay, (features["right_eye"]), radius, color, line_thickness)
+                cv2.circle(overlay, (features["nose"]), radius, color, line_thickness)
+                cv2.circle(overlay, (features["mouth_left"]), radius, color, line_thickness)
+                cv2.circle(overlay, (features["mouth_right"]), radius, color, line_thickness)
 
-        if resize:
-            scale_factor = 1. / resize
+                cv2.line(overlay, features["left_eye"], features["nose"], color, radius)
+                cv2.line(overlay, features["right_eye"], features["nose"], color, radius)
+                cv2.line(overlay, features["mouth_left"], features["nose"], color, radius)
+                cv2.line(overlay, features["mouth_right"], features["nose"], color, radius)
 
-            scale = lambda x: tuple(round(element * scale_factor) for element in x)
-            features = {feature: scale(features[feature]) for feature in features}
+            features = person["keypoints"]
+            x, y, height, width = person["box"]
 
-            scale = lambda *xs: tuple(round(x * scale_factor) for x in xs)
-            x, y, height, width = scale(x, y, height, width)
+            if resize:
+                scale_factor = 1. / resize
 
-        color = get_color(is_recognized, best_match)
+                scale = lambda x: tuple(round(element * scale_factor) for element in x)
+                features = {feature: scale(features[feature]) for feature in features}
 
-        margin = CONSTANTS["margin"]
-        origin = (x - margin // 2, y - margin // 2)
-        corner = (x + height + margin // 2, y + width + margin // 2)
+                scale = lambda *xs: tuple(round(x * scale_factor) for x in xs)
+                x, y, height, width = scale(x, y, height, width)
 
-        add_features(overlay, features, radius, color, line_thickness)
-        cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
+            color = get_color(is_recognized, best_match)
 
-        text = best_match if is_recognized else ""
-        add_box_and_label(frame, origin, corner, color, line_thickness, text, font_size, thickness=1)
+            margin = CONSTANTS["margin"]
+            origin = (x - margin // 2, y - margin // 2)
+            corner = (x + height + margin // 2, y + width + margin // 2)
 
+            add_features(overlay, features, radius, color, line_thickness)
+            cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
 
-    # DISPLAY
-    def show_embeds(self, encrypted=False, single=False):
-        assert self.data, "data must be provided to show embeddings"
-
-        def closest_multiples(n):
-            if n == 0 or n == 1:
-                return n, n
-            factors = [((i, int(n / i)), (abs(i - int(n / i)))) for i in range(1, n) if n % i == 0]
-            return sorted(factors, key=lambda n: n[1])[0][0]
-
-        if encrypted:
-            data = DataEncryption.encrypt_data(self.data, ignore=["embeddings"], decryptable=False)
-        else:
-            data = self.data
-
-        for person in data:
-            embed = np.asarray(data[person])
-            embed = embed.reshape(*closest_multiples(embed.shape[0]))
-
-            plt.imshow(embed, cmap="gray")
-            try:
-                plt.title(person)
-            except TypeError:
-                warnings.warn("encrypted data cannot be displayed due to presence of non-UTF8-decodable values")
-            plt.axis("off")
-            plt.show()
-
-            if single and person == list(data.keys())[0]:
-                break
+            text = best_match if is_recognized else ""
+            add_box_and_label(frame, origin, corner, color, line_thickness, text, font_size, thickness=1)
 
 
-    # LOGGING
-    @staticmethod
-    def log_activity(is_recognized, best_match, frame, logging_type, lcd):
-        firebase = True if logging_type == "firebase" else False
+        # DISPLAY
+        def show_embeds(self, encrypted=False, single=False):
+            assert self.data, "data must be provided to show embeddings"
 
-        cooldown_ok = lambda t: time.time() - t > log.THRESHOLDS["cooldown"]
-        mode = lambda d: max(d.keys(), key=lambda key: d[key])
+            def closest_multiples(n):
+                if n == 0 or n == 1:
+                    return n, n
+                factors = [((i, int(n / i)), (abs(i - int(n / i)))) for i in range(1, n) if n % i == 0]
+                return sorted(factors, key=lambda n: n[1])[0][0]
 
-        log.update_current_logs(is_recognized, best_match)
+            if encrypted:
+                data = DataEncryption.encrypt_data(self.data, ignore=["embeddings"], decryptable=False)
+            else:
+                data = self.data
 
-        if log.num_recognized >= log.THRESHOLDS["num_recognized"] and cooldown_ok(log.last_logged):
-            if log.get_percent_diff(best_match) <= log.THRESHOLDS["percent_diff"]:
-                recognized_person = mode(log.current_log)
-                log.log_person(recognized_person, times=log.current_log[recognized_person], firebase=firebase)
-                cprint("Regular activity logged ({})".format(best_match), color="green", attrs=["bold"])
+            for person in data:
+                embed = np.asarray(data[person])
+                embed = embed.reshape(*closest_multiples(embed.shape[0]))
+
+                plt.imshow(embed, cmap="gray")
+                try:
+                    plt.title(person)
+                except TypeError:
+                    warnings.warn("encrypted data cannot be displayed due to presence of non-UTF8-decodable values")
+                plt.axis("off")
+                plt.show()
+
+                if single and person == list(data.keys())[0]:
+                    break
+
+
+        # LOGGING
+        @staticmethod
+        def log_activity(is_recognized, best_match, frame, logging_type, lcd, use_dynamic):
+            firebase = True if logging_type == "firebase" else False
+
+            cooldown_ok = lambda t: time.time() - t > log.THRESHOLDS["cooldown"]
+            mode = lambda d: max(d.keys(), key=lambda key: len(d[key]))
+
+            log.update_current_logs(is_recognized, best_match)
+
+            if log.num_recognized >= log.THRESHOLDS["num_recognized"] and cooldown_ok(log.last_logged):
+                if log.get_percent_diff(best_match, log.current_log) <= log.THRESHOLDS["percent_diff"]:
+                    recognized_person = mode(log.current_log)
+                    log.log_person(recognized_person, times=log.current_log[recognized_person], firebase=firebase)
+                    cprint("Regular activity logged ({})".format(best_match), color="green", attrs=["bold"])
+
+                    if lcd:
+                        FaceNet.add_lcd_display(lcd, best_match)
+
+            elif log.num_unknown >= log.THRESHOLDS["num_unknown"] and cooldown_ok(log.unk_last_logged):
+                path = CONFIG_HOME + "/logging/unknown/{}.jpg".format(len(os.listdir(CONFIG_HOME + "/logging/unknown")))
+                log.log_unknown(path, firebase=firebase)
+
+                cprint("Unknown activity logged", color="red", attrs=["bold"])
+
+                if use_dynamic and np.std(log.l2_dists) > log.THRESHOLDS["percent_diff"] / 2:
+                    self.__dynamic_db["visitor_{}".format(len(self.__dynamic_db) + 1)] = embedding.flatten()
+                    self._train_knn(knn_types=["dynamic"])
+
+                    cprint("Visitor activity logged", color="purple", attrs=["bold"])
 
                 if lcd:
                     FaceNet.add_lcd_display(lcd, best_match)
 
-        if log.num_unknown >= log.THRESHOLDS["num_unknown"] and cooldown_ok(log.unk_last_logged):
-            path = CONFIG_HOME + "/logging/unknown/{}.jpg".format(len(os.listdir(CONFIG_HOME + "/logging/unknown")))
-            log.log_unknown(path, firebase=firebase)
-
-            warnings.warn("recording unknown images in user directory is deprecated andt will be changed later")
-            cv2.imwrite(path, frame)
-            cprint("Unknown activity logged", color="red", attrs=["bold"])
-
-            if lcd:
-                FaceNet.add_lcd_display(lcd, best_match)
-
-    @staticmethod
-    def add_lcd_display(lcd, best_match):
-        lcd.clear()
-        request = requests.get(CONFIG["server_address"])
-        data = request.json()
-        if data["accept"]:
-            lcd.message = "ID Accepted \n{}".format(best_match)
-        else:
-            lcd.message = "No Senior Priv\n{}".format(best_match)
-
-
-    # DYNAMIC DATABASE
-    def dynamic_update(self, embedding, l2_dists, lcd, best_match):
-        previous_frames = l2_dists[-log.THRESHOLDS["num_unknown"]:]
-        filtered = list(filter(lambda x: x > self.HYPERPARAMS["alpha"], previous_frames))
-
-        if len(l2_dists) >= log.THRESHOLDS["num_unknown"] and len(filtered) > 0:
-            mostly_unknown = len(filtered) / len(previous_frames) >= 1. - log.THRESHOLDS["percent_diff"]
-
-            if mostly_unknown and np.std(filtered) <= log.THRESHOLDS["percent_diff"] / 2.:
-                self.__dynamic_db["visitor_{}".format(len(self.__dynamic_db) + 1)] = embedding.flatten()
-                self._train_knn(knn_types=["dynamic"])
-                log.flush_current()
-
-                if lcd:
-                    self.add_lcd_display(lcd, best_match)
+        @staticmethod
+        def add_lcd_display(lcd, best_match):
+            lcd.clear()
+            request = requests.get(CONFIG["server_address"])
+            data = request.json()
+            if data["accept"]:
+                lcd.message = "ID Accepted \n{}".format(best_match)
+            else:
+                lcd.message = "No Senior Priv\n{}".format(best_match)
