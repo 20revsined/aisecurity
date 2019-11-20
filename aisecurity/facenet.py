@@ -453,7 +453,7 @@ class FaceNet(object):
 
                 cprint("Unknown activity logged", color="red", attrs=["bold"])
 
-                if use_dynamic and np.std(log.l2_dists) > log.THRESHOLDS["percent_diff"] / 2:
+                if use_dynamic:
                     self.__dynamic_db["visitor_{}".format(len(self.__dynamic_db) + 1)] = embedding.flatten()
                     self._train_knn(knn_types=["dynamic"])
 
