@@ -285,6 +285,11 @@ class FaceNet(object):
                     log.flush_current(mode=["known", "unknown"])
                 print("No face detected")
 
+                # make sure computation is performed periodically to keep GPU "warm" (i.e., constantly active);
+                # otherwise, recognition times can be slow when spaced out by several minutes
+                if time.time() - log.last_logged > 15.:
+                     self._recognize(frame, faces=[0]*4, db_types=None)
+
             cv2.imshow("AI Security v1.0a", original_frame)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
